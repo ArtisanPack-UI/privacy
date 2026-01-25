@@ -24,10 +24,12 @@ The `artisanpack-ui/privacy` package provides comprehensive privacy compliance t
 10. [Events & Listeners](#events--listeners)
 11. [Middleware](#middleware)
 12. [API Endpoints](#api-endpoints)
-13. [Integration Points](#integration-points)
-14. [Testing Strategy](#testing-strategy)
-15. [Documentation](#documentation)
-16. [Implementation Phases](#implementation-phases)
+13. [View Customization](#view-customization)
+14. [Analytics Package Integration](#analytics-package-integration)
+15. [Integration Points](#integration-points)
+16. [Testing Strategy](#testing-strategy)
+17. [Documentation](#documentation)
+18. [Implementation Phases](#implementation-phases)
 
 ---
 
@@ -1156,6 +1158,412 @@ Route::middleware('privacy.geolocate')->group(function () {
 
 ---
 
+## View Customization
+
+Developers can customize the package's UI in several ways:
+
+### 1. Publishing Views
+
+Publish all views to your application for full customization:
+
+```bash
+php artisan vendor:publish --tag=privacy-views
+```
+
+This publishes views to `resources/views/vendor/artisanpack-ui/privacy/`:
+
+```
+resources/views/vendor/artisanpack-ui/privacy/
+├── components/
+│   ├── cookie-banner.blade.php
+│   ├── consent-preferences.blade.php
+│   ├── data-request-form.blade.php
+│   └── privacy-dashboard.blade.php
+├── admin/
+│   ├── consent-manager.blade.php
+│   ├── data-request-manager.blade.php
+│   └── compliance-report.blade.php
+├── emails/
+│   ├── data-request-received.blade.php
+│   ├── data-request-completed.blade.php
+│   └── data-breach-notification.blade.php
+└── policy/
+    ├── show.blade.php
+    └── partials/
+        ├── gdpr.blade.php
+        └── ccpa.blade.php
+```
+
+### 2. Component Customization via Props
+
+Livewire components accept customization props:
+
+```blade
+{{-- Custom CSS classes --}}
+<livewire:privacy-cookie-banner
+    class="my-custom-banner"
+    :button-classes="['accept' => 'btn-primary', 'reject' => 'btn-outline']"
+/>
+
+{{-- Custom text/labels --}}
+<livewire:privacy-cookie-banner
+    :labels="[
+        'title' => 'We value your privacy',
+        'accept' => 'Accept All',
+        'reject' => 'Reject All',
+        'customize' => 'Manage Preferences',
+    ]"
+/>
+```
+
+### 3. Slot-Based Content Injection
+
+Components support slots for custom content:
+
+```blade
+<livewire:privacy-cookie-banner>
+    <x-slot:header>
+        <img src="/logo.svg" alt="Logo" class="h-8" />
+        <h3>Cookie Settings</h3>
+    </x-slot:header>
+
+    <x-slot:description>
+        We use cookies to enhance your experience. Read our
+        <a href="/privacy">privacy policy</a> for more details.
+    </x-slot:description>
+
+    <x-slot:footer>
+        <small>By continuing, you agree to our terms.</small>
+    </x-slot:footer>
+</livewire:privacy-cookie-banner>
+```
+
+### 4. CSS Variables for Theming
+
+The default views use CSS variables that can be overridden:
+
+```css
+:root {
+    /* Cookie Banner */
+    --privacy-banner-bg: theme('colors.base-100');
+    --privacy-banner-text: theme('colors.base-content');
+    --privacy-banner-shadow: 0 -4px 6px rgba(0, 0, 0, 0.1);
+
+    /* Buttons */
+    --privacy-btn-accept-bg: theme('colors.primary');
+    --privacy-btn-accept-text: theme('colors.primary-content');
+    --privacy-btn-reject-bg: theme('colors.base-300');
+    --privacy-btn-reject-text: theme('colors.base-content');
+
+    /* Toggle switches */
+    --privacy-toggle-on: theme('colors.success');
+    --privacy-toggle-off: theme('colors.base-300');
+}
+```
+
+### 5. Configuration-Based Customization
+
+The `config/artisanpack/privacy.php` file includes UI settings:
+
+```php
+'ui' => [
+    'cookie_banner' => [
+        'position' => 'bottom',           // top, bottom, bottom-left, bottom-right
+        'style' => 'bar',                 // bar, modal, floating
+        'show_reject_all' => true,
+        'show_customize' => true,
+        'blur_background' => false,
+        'animation' => 'slide-up',        // slide-up, fade, none
+        'z_index' => 9999,
+    ],
+    'theme' => 'auto',                    // auto, light, dark
+    'custom_css_class' => '',             // Additional CSS class for all components
+    'use_daisyui' => true,                // Use daisyUI component classes
+],
+```
+
+### 6. Extending Components
+
+Create custom Livewire components that extend the package's components:
+
+```php
+namespace App\Livewire;
+
+use ArtisanPackUI\Privacy\Livewire\CookieBanner as BaseCookieBanner;
+
+class CustomCookieBanner extends BaseCookieBanner
+{
+    public function render()
+    {
+        return view('livewire.custom-cookie-banner', $this->getViewData());
+    }
+
+    // Override methods as needed
+    public function acceptAll()
+    {
+        parent::acceptAll();
+
+        // Custom logic after acceptance
+        $this->dispatch('custom-consent-event');
+    }
+}
+```
+
+Register your custom component in a service provider:
+
+```php
+use Livewire\Livewire;
+
+Livewire::component('privacy-cookie-banner', \App\Livewire\CustomCookieBanner::class);
+```
+
+---
+
+## Analytics Package Integration
+
+The `artisanpack-ui/privacy` package integrates seamlessly with `artisanpack-ui/analytics` when both are installed. This integration ensures a unified consent experience and prevents duplicate consent UI.
+
+### Integration Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     Privacy Package (Primary)                   │
+├─────────────────────────────────────────────────────────────────┤
+│  Cookie Banner  │  Consent Service  │  Consent Events          │
+│                 │  (Single Source)  │                          │
+└────────┬────────┴────────┬──────────┴───────────┬──────────────┘
+         │                 │                      │
+         ▼                 ▼                      ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     Analytics Package (Consumer)                 │
+├─────────────────────────────────────────────────────────────────┤
+│  Listens for     │  Checks Privacy  │  Defers Consent UI       │
+│  Consent Events  │  Consent Status  │  to Privacy Package      │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### How It Works
+
+**1. Automatic Detection**
+
+When both packages are installed, Analytics detects Privacy and defers to it:
+
+```php
+// In Analytics package AnalyticsServiceProvider
+public function boot(): void
+{
+    if ($this->privacyPackageInstalled()) {
+        // Don't register our own consent banner
+        // Listen for Privacy package events instead
+        $this->registerPrivacyIntegration();
+    }
+}
+
+protected function privacyPackageInstalled(): bool
+{
+    return class_exists(\ArtisanPackUI\Privacy\PrivacyServiceProvider::class);
+}
+```
+
+**2. Event Integration**
+
+Analytics listens for Privacy consent events:
+
+```php
+// In Analytics package
+use ArtisanPackUI\Privacy\Events\ConsentGiven;
+use ArtisanPackUI\Privacy\Events\ConsentWithdrawn;
+
+Event::listen(ConsentGiven::class, function ($event) {
+    if ($event->consent->category === 'analytics') {
+        // Start tracking for this user
+        Analytics::enableTracking($event->consent->consentable);
+    }
+});
+
+Event::listen(ConsentWithdrawn::class, function ($event) {
+    if ($event->consent->category === 'analytics') {
+        // Stop tracking for this user
+        Analytics::disableTracking($event->consent->consentable);
+        // Optionally delete existing data
+        Analytics::handleOptOut($event->consent->consentable);
+    }
+});
+```
+
+**3. Consent Check Integration**
+
+Analytics uses Privacy's consent service:
+
+```php
+// In Analytics TrackingService
+public function shouldTrack(): bool
+{
+    // When Privacy package is installed, defer to it
+    if ($this->privacyIntegration) {
+        return privacyHasConsent('analytics');
+    }
+
+    // Fallback to Analytics' own consent check
+    return $this->hasOwnConsent();
+}
+```
+
+**4. JavaScript API Integration**
+
+Analytics JavaScript defers to Privacy's consent state:
+
+```javascript
+// In analytics.js
+(function() {
+    const analytics = {
+        track: function(event, data) {
+            // Check Privacy package consent first
+            if (window.PrivacyConsent && !window.PrivacyConsent.hasConsent('analytics')) {
+                return; // Don't track without consent
+            }
+
+            // Proceed with tracking
+            this._sendEvent(event, data);
+        }
+    };
+
+    // Listen for Privacy consent changes
+    window.addEventListener('privacy:consent-updated', function(e) {
+        if (e.detail.category === 'analytics') {
+            if (e.detail.granted) {
+                analytics.enable();
+            } else {
+                analytics.disable();
+            }
+        }
+    });
+
+    window.Analytics = analytics;
+})();
+```
+
+### Configuration
+
+**Privacy Package Configuration**
+
+Ensure the `analytics` category is defined in Privacy config:
+
+```php
+// config/artisanpack/privacy.php
+'cookie_categories' => [
+    'necessary' => [
+        'name' => 'Strictly Necessary',
+        'required' => true,
+    ],
+    'analytics' => [
+        'name' => 'Analytics',
+        'description' => 'Help us understand how visitors use our site.',
+        'required' => false,
+        'cookies' => ['_ap_sid', '_ap_vid'], // Analytics package cookies
+    ],
+    // ...
+],
+```
+
+**Analytics Package Configuration**
+
+When Privacy is installed, Analytics auto-configures:
+
+```php
+// config/artisanpack/analytics.php
+'privacy' => [
+    // Automatically set to true when Privacy package is detected
+    'use_privacy_package' => true,
+
+    // Analytics' own consent is disabled when Privacy handles it
+    'consent_required' => false,
+
+    // Category name to check in Privacy package
+    'consent_category' => 'analytics',
+],
+```
+
+### Blade Directive Behavior
+
+When both packages are installed:
+
+```blade
+{{-- Use Privacy's banner (Analytics won't show its own) --}}
+<livewire:privacy-cookie-banner />
+
+{{-- This becomes a no-op when Privacy is installed --}}
+@analyticsConsentBanner
+
+{{-- Both work, but Privacy is the source of truth --}}
+@hasConsent('analytics')
+    {{-- This content only shows if Privacy consent is granted --}}
+    @analyticsScripts
+@endhasConsent
+```
+
+### Filter Hooks for Integration
+
+Privacy provides hooks that Analytics uses:
+
+```php
+// Privacy package provides these hooks
+addFilter('privacy.consent.categories', function ($categories) {
+    // Analytics can add its category if not present
+    if (!isset($categories['analytics'])) {
+        $categories['analytics'] = [
+            'name' => 'Analytics',
+            'description' => 'Website analytics and performance tracking',
+            'required' => false,
+        ];
+    }
+    return $categories;
+});
+
+// Analytics can register its cookies with Privacy
+addAction('privacy.cookies.register', function ($cookieRegistry) {
+    $cookieRegistry->register('analytics', [
+        '_ap_sid' => 'Session identifier for analytics',
+        '_ap_vid' => 'Visitor identifier for analytics',
+    ]);
+});
+```
+
+### Data Subject Rights Integration
+
+When a user exercises data rights through Privacy:
+
+```php
+// Privacy package fires event
+Event::dispatch(new DataDeletionRequested($user));
+
+// Analytics listens and deletes its data
+Event::listen(DataDeletionRequested::class, function ($event) {
+    Analytics::deleteUserData($event->user);
+});
+
+// For data export
+Event::listen(DataExportRequested::class, function ($event) {
+    // Add analytics data to export
+    $event->addData('analytics', Analytics::exportUserData($event->user));
+});
+```
+
+### Summary: Package Behavior
+
+| Scenario | Privacy Installed | Analytics Behavior |
+|----------|-------------------|-------------------|
+| Consent UI | Yes | Analytics doesn't show its banner |
+| Consent Check | Yes | Defers to `privacyHasConsent('analytics')` |
+| Consent Storage | Yes | Privacy stores, Analytics reads |
+| Consent Events | Yes | Listens for Privacy events |
+| Data Deletion | Yes | Responds to Privacy deletion events |
+| Data Export | Yes | Contributes data to Privacy exports |
+| Consent UI | No | Shows its own consent banner |
+| Consent Check | No | Uses its own consent mechanism |
+
+---
+
 ## Integration Points
 
 ### Model Trait: HasPersonalData
@@ -1578,3 +1986,4 @@ class MyTest extends TestCase
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 0.1 | Jan 2026 | Jacob Martella | Initial plan draft |
+| 0.2 | Jan 2026 | Jacob Martella | Added View Customization section; Added Analytics Package Integration section |
