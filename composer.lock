@@ -4,19 +4,19 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "a467e19d7f792d1fba4da4a9de5b02fd",
+    "content-hash": "d28bf0d60372ef28d9376de3b2556056",
     "packages": [
         {
             "name": "artisanpack-ui/core",
             "version": "1.1.0",
             "source": {
                 "type": "git",
-                "url": "https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-core.git",
+                "url": "https://github.com/ArtisanPack-UI/core.git",
                 "reference": "16e91edb542948ee335c618a17fdc60f8593d671"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://gitlab.com/api/v4/projects/jacob-martella-web-design%2Fartisanpack-ui%2Fartisanpack-ui-core/repository/archive.zip?sha=16e91edb542948ee335c618a17fdc60f8593d671",
+                "url": "https://api.github.com/repos/ArtisanPack-UI/core/zipball/16e91edb542948ee335c618a17fdc60f8593d671",
                 "reference": "16e91edb542948ee335c618a17fdc60f8593d671",
                 "shasum": ""
             },
@@ -5860,12 +5860,12 @@
             "version": "1.1.0",
             "source": {
                 "type": "git",
-                "url": "https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-code-style.git",
+                "url": "https://github.com/ArtisanPack-UI/code-style.git",
                 "reference": "c515b88b18ba99b758f1a22279701bbb7c79cf1b"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://gitlab.com/api/v4/projects/jacob-martella-web-design%2Fartisanpack-ui%2Fartisanpack-ui-code-style/repository/archive.zip?sha=c515b88b18ba99b758f1a22279701bbb7c79cf1b",
+                "url": "https://api.github.com/repos/ArtisanPack-UI/code-style/zipball/c515b88b18ba99b758f1a22279701bbb7c79cf1b",
                 "reference": "c515b88b18ba99b758f1a22279701bbb7c79cf1b",
                 "shasum": ""
             },
@@ -5914,12 +5914,12 @@
             "version": "1.1.0",
             "source": {
                 "type": "git",
-                "url": "https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-code-style-pint.git",
+                "url": "https://github.com/ArtisanPack-UI/code-style-pint.git",
                 "reference": "31997861d7564c044a7c7b93df792cafcb93dab6"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://gitlab.com/api/v4/projects/jacob-martella-web-design%2Fartisanpack-ui%2Fartisanpack-ui-code-style-pint/repository/archive.zip?sha=31997861d7564c044a7c7b93df792cafcb93dab6",
+                "url": "https://api.github.com/repos/ArtisanPack-UI/code-style-pint/zipball/31997861d7564c044a7c7b93df792cafcb93dab6",
                 "reference": "31997861d7564c044a7c7b93df792cafcb93dab6",
                 "shasum": ""
             },
@@ -11329,5 +11329,5 @@
         "php": "^8.2"
     },
     "platform-dev": {},
-    "plugin-api-version": "2.9.0"
+    "plugin-api-version": "2.6.0"
 }
