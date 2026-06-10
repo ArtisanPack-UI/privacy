@@ -35,7 +35,7 @@
     "artisanpack-ui/code-style-pint": "^1.1",
     "dealerdirect/phpcodesniffer-composer-installer": "^1.0",
     "laravel/pint": "^1.26",
-    "orchestra/testbench": "^10.2",
+    "orchestra/testbench": "^10.2|^11.0",
     "friendsofphp/php-cs-fixer": "^3.75"
   },
   "scripts": {
