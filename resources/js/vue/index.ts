@@ -6,6 +6,7 @@
 
 export { default as CookieBanner } from './CookieBanner.vue';
 export { default as ConsentPreferences } from './ConsentPreferences.vue';
+export { default as DataRequestForm } from './DataRequestForm.vue';
 export { useConsent } from './useConsent';
 export type { UseConsentOptions, UseConsentResult } from './useConsent';
 export type {

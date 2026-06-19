@@ -143,6 +143,21 @@ class Consent extends Model
 	}
 
 	/**
+	 * Scope: consents whose `expires_at` has passed.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  Builder  $query  Query builder.
+	 *
+	 * @return Builder
+	 */
+	public function scopeExpired( Builder $query ): Builder
+	{
+		return $query->whereNotNull( 'expires_at' )
+			->where( 'expires_at', '<', now() );
+	}
+
+	/**
 	 * Scope: limit to a specific consent category.
 	 *
 	 * @since 1.0.0

@@ -18,6 +18,7 @@ namespace ArtisanPackUI\Privacy\Listeners;
 use ArtisanPackUI\Privacy\Events\DataAccessRequested;
 use ArtisanPackUI\Privacy\Events\DataDeletionRequested;
 use ArtisanPackUI\Privacy\Events\DataExportRequested;
+use ArtisanPackUI\Privacy\Events\DataRectificationRequested;
 use ArtisanPackUI\Privacy\Models\DataRequest;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -72,6 +73,20 @@ class NotifyAdminOfRequest
 	 * @return void
 	 */
 	public function handleExport( DataExportRequested $event ): void
+	{
+		$this->notify( $event->request );
+	}
+
+	/**
+	 * Handle a {@see DataRectificationRequested} event.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  DataRectificationRequested  $event Event payload.
+	 *
+	 * @return void
+	 */
+	public function handleRectification( DataRectificationRequested $event ): void
 	{
 		$this->notify( $event->request );
 	}

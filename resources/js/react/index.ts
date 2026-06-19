@@ -8,6 +8,8 @@ export { CookieBanner } from './CookieBanner';
 export type { CookieBannerProps } from './CookieBanner';
 export { ConsentPreferences } from './ConsentPreferences';
 export type { ConsentPreferencesProps } from './ConsentPreferences';
+export { DataRequestForm } from './DataRequestForm';
+export type { DataRequestFormProps, DataRequestResult, DataRequestType } from './DataRequestForm';
 export { useConsent } from './useConsent';
 export type { UseConsentOptions, UseConsentResult } from './useConsent';
 export type {

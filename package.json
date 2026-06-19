@@ -16,6 +16,10 @@
 			"types": "./resources/js/privacy.ts",
 			"import": "./resources/js/privacy.ts"
 		},
+		"./window": {
+			"types": "./resources/js/window-privacy-consent.ts",
+			"import": "./resources/js/window-privacy-consent.ts"
+		},
 		"./react": {
 			"types": "./resources/js/react/index.ts",
 			"import": "./resources/js/react/index.ts"

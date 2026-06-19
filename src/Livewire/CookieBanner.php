@@ -20,9 +20,13 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\Privacy\Livewire;
 
+use ArtisanPackUI\Privacy\Models\Consent;
 use ArtisanPackUI\Privacy\Services\ConsentService;
 use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cookie;
+use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
 
@@ -103,8 +107,8 @@ class CookieBanner extends Component
 		$this->position   = $position ?? (string) ( $ui['position'] ?? 'bottom' );
 		$this->style      = $style ?? (string) ( $ui['style'] ?? 'bar' );
 		$this->categories = $categories ?? $this->resolveCategories();
-		$this->selected   = $this->defaultSelection();
-		$this->visible    = ! $this->hasExistingConsent();
+		$this->selected   = $this->previousSelections();
+		$this->visible    = ! $this->hasExistingConsent() || $this->hasExpiredConsent();
 	}
 
 	/**
@@ -195,6 +199,23 @@ class CookieBanner extends Component
 	}
 
 	/**
+	 * Handles the `privacy:open-preferences` browser event dispatched by the
+	 * `window.PrivacyConsent.openPreferences()` JavaScript helper.
+	 *
+	 * Re-opens the banner if the visitor has already dismissed it so they can
+	 * revisit their previous choices.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @return void
+	 */
+	public function openFromGlobal(): void
+	{
+		$this->visible         = true;
+		$this->showPreferences = true;
+	}
+
+	/**
 	 * Persists the visitor's inline-preference selections via {@see acceptSelected()}.
 	 *
 	 * @since 1.0.0
@@ -240,6 +261,60 @@ class CookieBanner extends Component
 	}
 
 	/**
+	 * Re-consent helper that pre-seeds the inline preferences panel with
+	 * the visitor's most recent selections. Prefers the cookie when present;
+	 * falls back to the database for `storage = database` deployments where
+	 * the cookie is never written.
+	 *
+	 * Uses `FILTER_VALIDATE_BOOLEAN` so string values written by a partner
+	 * CMP (`"false"`, `"0"`, etc.) are not silently promoted to `true`.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @return array<string, bool>
+	 */
+	protected function previousSelections(): array
+	{
+		$prior = [];
+
+		foreach ( $this->categories as $category => $config ) {
+			$prior[ (string) $category ] = true === ( $config['required'] ?? false );
+		}
+
+		$service = app( ConsentService::class );
+		$cookie  = $service->getConsentCookie();
+
+		if ( is_array( $cookie ) ) {
+			foreach ( $cookie as $category => $granted ) {
+				if ( is_string( $category ) && array_key_exists( $category, $prior ) ) {
+					$normalized = filter_var(
+						$granted,
+						FILTER_VALIDATE_BOOLEAN,
+						FILTER_NULL_ON_FAILURE,
+					);
+
+					$prior[ $category ] = ( true === $normalized )
+						|| true === ( $this->categories[ $category ]['required'] ?? false );
+				}
+			}
+
+			return $prior;
+		}
+
+		$user = Auth::user();
+		if ( $user instanceof Model ) {
+			foreach ( $service->getConsents( $user ) as $row ) {
+				$category = (string) $row->category;
+				if ( array_key_exists( $category, $prior ) ) {
+					$prior[ $category ] = true;
+				}
+			}
+		}
+
+		return $prior;
+	}
+
+	/**
 	 * Closes the banner and dispatches the `privacy:banner-closed` browser event.
 	 *
 	 * @since 1.0.0
@@ -264,6 +339,47 @@ class CookieBanner extends Component
 	protected function hasExistingConsent(): bool
 	{
 		return null !== Cookie::get( (string) config( 'artisanpack.privacy.consent.cookie_name', 'privacy_consent' ) );
+	}
+
+	/**
+	 * Returns true when the authenticated visitor has at least one consent
+	 * row whose `expires_at` is in the past AND is still the latest decision
+	 * for its category (no newer row supersedes it). Drives the re-consent
+	 * flow: an expired consent should pop the banner back open so the visitor
+	 * can confirm their preferences.
+	 *
+	 * Deliberately does NOT filter on `withdrawn_at` — the scheduled
+	 * {@see \ArtisanPackUI\Privacy\Console\Commands\PurgeExpiredConsents}
+	 * command sets that column when it sweeps expired rows, and we still want
+	 * the banner to re-prompt afterwards. The `whereNotExists` subquery
+	 * suppresses the re-prompt once the visitor has actually re-consented
+	 * (the new row is newer than the expired one).
+	 *
+	 * @since 1.0.0
+	 *
+	 * @return bool
+	 */
+	protected function hasExpiredConsent(): bool
+	{
+		$user = Auth::user();
+
+		if ( ! $user instanceof Model ) {
+			return false;
+		}
+
+		return Consent::query()
+			->forSubject( $user )
+			->whereNotNull( 'expires_at' )
+			->where( 'expires_at', '<', now() )
+			->whereNotExists( function ( $query ): void {
+				$query->select( DB::raw( 1 ) )
+					->from( 'privacy_consents as newer' )
+					->whereColumn( 'newer.consentable_type', 'privacy_consents.consentable_type' )
+					->whereColumn( 'newer.consentable_id', 'privacy_consents.consentable_id' )
+					->whereColumn( 'newer.category', 'privacy_consents.category' )
+					->whereColumn( 'newer.created_at', '>', 'privacy_consents.created_at' );
+			} )
+			->exists();
 	}
 
 	/**
@@ -292,24 +408,5 @@ class CookieBanner extends Component
 	protected function resolveCategories(): array
 	{
 		return (array) config( 'artisanpack.privacy.cookie_categories', [] );
-	}
-
-	/**
-	 * Default selection map for the inline preferences panel: required
-	 * categories pre-toggled on, optional categories off.
-	 *
-	 * @since 1.0.0
-	 *
-	 * @return array<string, bool>
-	 */
-	protected function defaultSelection(): array
-	{
-		$state = [];
-
-		foreach ( $this->categories as $category => $config ) {
-			$state[ $category ] = true === ( $config['required'] ?? false );
-		}
-
-		return $state;
 	}
 }

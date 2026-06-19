@@ -20,12 +20,14 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\Privacy;
 
+use ArtisanPackUI\Privacy\Console\Commands\PurgeExpiredConsents;
 use ArtisanPackUI\Privacy\Events\ConsentGiven;
 use ArtisanPackUI\Privacy\Events\ConsentWithdrawn;
 use ArtisanPackUI\Privacy\Events\DataAccessRequested;
 use ArtisanPackUI\Privacy\Events\DataBreach;
 use ArtisanPackUI\Privacy\Events\DataDeletionRequested;
 use ArtisanPackUI\Privacy\Events\DataExportRequested;
+use ArtisanPackUI\Privacy\Events\DataRectificationRequested;
 use ArtisanPackUI\Privacy\Listeners\LogConsentActivity;
 use ArtisanPackUI\Privacy\Listeners\NotifyAdminOfRequest;
 use ArtisanPackUI\Privacy\Listeners\NotifyDataBreach;
@@ -34,12 +36,18 @@ use ArtisanPackUI\Privacy\Listeners\ProcessDataExportRequest;
 use ArtisanPackUI\Privacy\Listeners\SyncConsentOnLogin;
 use ArtisanPackUI\Privacy\Livewire\ConsentPreferences;
 use ArtisanPackUI\Privacy\Livewire\CookieBanner;
+use ArtisanPackUI\Privacy\Livewire\DataRequestForm;
 use ArtisanPackUI\Privacy\Services\AnonymizationService;
 use ArtisanPackUI\Privacy\Services\ConsentService;
 use ArtisanPackUI\Privacy\Services\DataRequestService;
+use ArtisanPackUI\Privacy\View\PrivacyDirectives;
 use Illuminate\Auth\Events\Login;
+use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
 /**
@@ -74,6 +82,9 @@ class PrivacyServiceProvider extends ServiceProvider
 		],
 		DataDeletionRequested::class => [
 			[ NotifyAdminOfRequest::class, 'handleDeletion' ],
+		],
+		DataRectificationRequested::class => [
+			[ NotifyAdminOfRequest::class, 'handleRectification' ],
 		],
 		DataBreach::class => [
 			[ NotifyDataBreach::class, 'handle' ],
@@ -140,6 +151,141 @@ class PrivacyServiceProvider extends ServiceProvider
 		$this->loadPackageViews();
 		$this->registerLivewireComponents();
 		$this->registerApiRoutes();
+		$this->registerBladeDirectives();
+		$this->registerMiddlewareAliases();
+		$this->registerViewComposers();
+		$this->registerConsoleCommands();
+		$this->registerScheduledTasks();
+	}
+
+	/**
+	 * Registers a global view composer that exposes the current request's
+	 * `privacy_consent` attribute (populated by {@see CheckCookieConsent}) to
+	 * every view as `$privacyConsent`.
+	 *
+	 * Composers are evaluated per-render, so this is Octane-safe — there is
+	 * no shared View::share state to leak between requests. Views requested
+	 * outside an HTTP request (CLI, queue worker) receive an empty map.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @return void
+	 */
+	protected function registerViewComposers(): void
+	{
+		View::composer( '*', static function ( $view ): void {
+			$request = request();
+
+			$map = $request instanceof \Illuminate\Http\Request
+				? (array) $request->attributes->get( 'privacy_consent', [] )
+				: [];
+
+			$view->with( 'privacyConsent', $map );
+		} );
+	}
+
+	/**
+	 * Registers the package's Artisan commands when running in the console.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @return void
+	 */
+	protected function registerConsoleCommands(): void
+	{
+		if ( ! $this->app->runningInConsole() ) {
+			return;
+		}
+
+		$this->commands( [
+			PurgeExpiredConsents::class,
+		] );
+	}
+
+	/**
+	 * Registers the package's default schedule entries (cleanup, etc.) so
+	 * applications that use Laravel's scheduler get them for free.
+	 *
+	 * Disable via `artisanpack.privacy.scheduling.purge_expired.enabled` or
+	 * override the cron expression via `.cron`.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @return void
+	 */
+	protected function registerScheduledTasks(): void
+	{
+		if ( ! $this->app->runningInConsole() ) {
+			return;
+		}
+
+		$purgeConfig = (array) config( 'artisanpack.privacy.scheduling.purge_expired', [] );
+
+		if ( true !== ( $purgeConfig['enabled'] ?? true ) ) {
+			return;
+		}
+
+		$this->app->booted( function ( Application $app ) use ( $purgeConfig ): void {
+			if ( ! $app->bound( Schedule::class ) ) {
+				return;
+			}
+
+			$schedule = $app->make( Schedule::class );
+			$cron     = (string) ( $purgeConfig['cron'] ?? '0 3 * * *' );
+			$prune    = (bool) ( $purgeConfig['prune'] ?? false );
+
+			$event = $schedule->command(
+				'privacy:purge-expired' . ( $prune ? ' --prune' : '' ),
+			)->cron( $cron );
+
+			if ( ! empty( $purgeConfig['timezone'] ) ) {
+				$event->timezone( (string) $purgeConfig['timezone'] );
+			}
+		} );
+	}
+
+	/**
+	 * Registers the package's Blade directives for consent checking inside
+	 * views: `@hasConsent('category')` / `@endhasConsent`, and
+	 * `@consentRequired('category')` / `@else` / `@endconsentRequired`.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @return void
+	 */
+	protected function registerBladeDirectives(): void
+	{
+		$class = PrivacyDirectives::class;
+
+		Blade::directive( 'hasConsent', static function ( string $expression ) use ( $class ): string {
+			return "<?php if ( \\{$class}::hasConsent( {$expression} ) ): ?>";
+		} );
+		Blade::directive( 'endhasConsent', static fn (): string => '<?php endif; ?>' );
+
+		Blade::directive( 'consentRequired', static function ( string $expression ) use ( $class ): string {
+			return "<?php if ( ! \\{$class}::hasConsent( {$expression} ) ): ?>";
+		} );
+		Blade::directive( 'endconsentRequired', static fn (): string => '<?php endif; ?>' );
+	}
+
+	/**
+	 * Registers the package's HTTP middleware aliases so applications can
+	 * reference them by short name in route definitions.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @return void
+	 */
+	protected function registerMiddlewareAliases(): void
+	{
+		$router = $this->app['router'] ?? null;
+
+		if ( null === $router ) {
+			return;
+		}
+
+		$router->aliasMiddleware( 'privacy.consent', Http\Middleware\EnsureConsentGiven::class );
+		$router->aliasMiddleware( 'privacy.context', Http\Middleware\CheckCookieConsent::class );
 	}
 
 	/**
@@ -226,5 +372,6 @@ class PrivacyServiceProvider extends ServiceProvider
 
 		\Livewire\Livewire::component( 'privacy-cookie-banner', CookieBanner::class );
 		\Livewire\Livewire::component( 'privacy-consent-preferences', ConsentPreferences::class );
+		\Livewire\Livewire::component( 'privacy-data-request-form', DataRequestForm::class );
 	}
 }

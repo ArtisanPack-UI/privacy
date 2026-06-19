@@ -4,6 +4,7 @@ declare( strict_types=1 );
 
 use ArtisanPackUI\Privacy\Livewire\CookieBanner;
 use ArtisanPackUI\Privacy\Models\Consent;
+use ArtisanPackUI\Privacy\Services\ConsentService;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\Schema;
@@ -138,4 +139,143 @@ it( 'flips visible to false after acceptAll', function (): void {
 		->assertSet( 'visible', true )
 		->call( 'acceptAll' )
 		->assertSet( 'visible', false );
+} );
+
+it( 'openFromGlobal re-opens the banner with the preferences panel already expanded', function (): void {
+	$component = Livewire::test( CookieBanner::class )
+		->call( 'acceptAll' )
+		->assertSet( 'visible', false )
+		->assertSet( 'showPreferences', false )
+		->call( 'openFromGlobal' );
+
+	$component
+		->assertSet( 'visible', true )
+		->assertSet( 'showPreferences', true );
+} );
+
+it( 'pre-seeds selected from a prior cookie via previousSelections', function (): void {
+	$service = Mockery::mock( ConsentService::class )->makePartial();
+	$service->shouldReceive( 'getConsentCookie' )
+		->andReturn( [ 'necessary' => true, 'analytics' => true, 'marketing' => false ] );
+	app()->instance( ConsentService::class, $service );
+
+	Livewire::test( CookieBanner::class )
+		->assertSet( 'selected.necessary', true )
+		->assertSet( 'selected.analytics', true )
+		->assertSet( 'selected.marketing', false );
+} );
+
+it( 'previousSelections treats string "false" as false (no GDPR over-grant)', function (): void {
+	$service = Mockery::mock( ConsentService::class )->makePartial();
+	$service->shouldReceive( 'getConsentCookie' )
+		->andReturn( [ 'necessary' => true, 'analytics' => 'false', 'marketing' => '0' ] );
+	app()->instance( ConsentService::class, $service );
+
+	Livewire::test( CookieBanner::class )
+		->assertSet( 'selected.analytics', false )
+		->assertSet( 'selected.marketing', false );
+} );
+
+it( 'previousSelections falls back to DB consents when the cookie is empty (database storage mode)', function (): void {
+	config()->set( 'artisanpack.privacy.consent.storage', 'database' );
+
+	$subject = TestSubject::create();
+	app( ConsentService::class )->grantConsent( 'analytics', $subject );
+	$this->actingAs( $subject );
+
+	Livewire::test( CookieBanner::class )
+		->assertSet( 'selected.analytics', true )
+		->assertSet( 'selected.marketing', false );
+} );
+
+it( 'hasExpiredConsent triggers re-prompt when the visitor has an expired row', function (): void {
+	config()->set( 'artisanpack.privacy.consent.storage', 'both' );
+
+	$subject = TestSubject::create();
+	$this->actingAs( $subject );
+
+	Consent::query()->create( [
+		'consentable_type' => $subject->getMorphClass(),
+		'consentable_id'   => $subject->getKey(),
+		'category'         => 'analytics',
+		'granted'          => true,
+		'regulation'       => 'gdpr',
+		'expires_at'       => now()->subDay(),
+	] );
+
+	// Simulate the visitor's cookie still being on disk via facade mock —
+	// without it, hasExistingConsent() returns false and the banner shows
+	// for that reason instead.
+	Cookie::shouldReceive( 'get' )->andReturn( json_encode( [ 'analytics' => true ] ) );
+	Cookie::shouldReceive( 'queue' )->andReturnNull();
+	Cookie::shouldReceive( 'getQueuedCookies' )->andReturn( [] );
+	Cookie::shouldReceive( 'has' )->andReturn( true );
+
+	Livewire::test( CookieBanner::class )->assertSet( 'visible', true );
+} );
+
+it( 'hasExpiredConsent survives the purge command soft-withdrawal', function (): void {
+	config()->set( 'artisanpack.privacy.consent.storage', 'both' );
+
+	$subject = TestSubject::create();
+	$this->actingAs( $subject );
+
+	Consent::query()->create( [
+		'consentable_type' => $subject->getMorphClass(),
+		'consentable_id'   => $subject->getKey(),
+		'category'         => 'analytics',
+		'granted'          => true,
+		'regulation'       => 'gdpr',
+		'expires_at'       => now()->subDay(),
+	] );
+
+	// Run the purge — this sets withdrawn_at on the expired row.
+	$this->artisan( 'privacy:purge-expired' )->assertExitCode( 0 );
+
+	Cookie::shouldReceive( 'get' )
+		->andReturnUsing( fn ( string $name ) => 'privacy_consent' === $name
+			? json_encode( [ 'analytics' => true ] )
+			: null );
+	Cookie::shouldReceive( 'queue' )->andReturnNull();
+	Cookie::shouldReceive( 'getQueuedCookies' )->andReturn( [] );
+
+	// Banner must still trigger re-prompt — the purge cancelling re-consent
+	// was the worst bug in the review.
+	Livewire::test( CookieBanner::class )->assertSet( 'visible', true );
+} );
+
+it( 'hasExpiredConsent stops re-prompting once the visitor has re-consented', function (): void {
+	config()->set( 'artisanpack.privacy.consent.storage', 'both' );
+
+	$subject = TestSubject::create();
+	$this->actingAs( $subject );
+
+	// Day 1 — visitor granted analytics with an expiry. Use the query
+	// builder to backdate `created_at` because Eloquent's save() always
+	// refreshes timestamps.
+	$old = Consent::query()->create( [
+		'consentable_type' => $subject->getMorphClass(),
+		'consentable_id'   => $subject->getKey(),
+		'category'         => 'analytics',
+		'granted'          => true,
+		'regulation'       => 'gdpr',
+		'expires_at'       => now()->subDay(),
+	] );
+	Consent::query()->where( 'id', $old->id )->update( [
+		'created_at' => now()->subDays( 2 ),
+		'updated_at' => now()->subDays( 2 ),
+	] );
+
+	// Day N — visitor re-consents (the service supersedes the old row).
+	app( ConsentService::class )->grantConsent( 'analytics', $subject );
+
+	// Call hasExpiredConsent directly via reflection — Livewire::test
+	// adds enough lifecycle wrapping that mocking the Cookie facade for
+	// hasExistingConsent fights with the grantConsent call above. The
+	// query is what the review flagged; verify it.
+	$component  = new CookieBanner();
+	$reflection = new ReflectionMethod( $component, 'hasExpiredConsent' );
+	$reflection->setAccessible( true );
+
+	expect( $reflection->invoke( $component ) )->toBeFalse();
 } );
