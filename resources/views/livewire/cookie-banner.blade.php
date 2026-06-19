@@ -13,6 +13,7 @@
 	x-data="{ visible: @entangle('visible').live }"
 	x-cloak
 	x-show="visible"
+	x-on:privacy:open-preferences.window="$wire.openFromGlobal()"
 	x-trap.noscroll.inert="visible && '{{ $this->style }}' === 'modal'"
 	role="dialog"
 	aria-modal="{{ $this->style === 'modal' ? 'true' : 'false' }}"

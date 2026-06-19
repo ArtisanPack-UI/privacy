@@ -221,13 +221,18 @@ export function resetPrivacyClient(): void {
 	defaultClient = null;
 }
 
-if ( typeof window !== 'undefined' ) {
-	const target = window as unknown as { ArtisanPackPrivacy?: PrivacyClient };
+// Synchronous install — must run before any inline script reads
+// `window.PrivacyConsent` or `window.ArtisanPackPrivacy`, and before any
+// Livewire/Alpine handler can dispatch `privacy:consent-updated`. The
+// install function is idempotent so re-importing this module (multiple
+// bundles, code-split chunks, HMR) is safe.
+//
+// `installWindowPrivacyConsent` only depends on `PrivacyClient` and the
+// `getPrivacyClient()` factory from this module — no eval-time
+// side-effects flow back, so the static import does not create a
+// circular-init problem.
+import { installWindowPrivacyConsent } from './window-privacy-consent';
 
-	// Guard so that re-importing the module (multiple bundles, code-split
-	// chunks, HMR) doesn't replace an already-installed singleton — that
-	// would orphan any listeners callers have already subscribed.
-	if ( ! target.ArtisanPackPrivacy ) {
-		target.ArtisanPackPrivacy = getPrivacyClient();
-	}
+if ( typeof window !== 'undefined' ) {
+	installWindowPrivacyConsent();
 }

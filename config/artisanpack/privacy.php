@@ -128,7 +128,16 @@ return [
 		'enabled'              => true,
 		'require_verification' => true,
 		'verification_method'  => env( 'PRIVACY_VERIFICATION_METHOD', 'email' ),
-		'auto_process'         => [
+
+		/*
+		| Request types the package will accept on the JSON endpoint and the
+		| Livewire/React/Vue forms. Remove a type from this list to disable
+		| it everywhere — the JSON validator enforces the same allowlist as
+		| the UI, so clients cannot bypass a UI restriction via curl.
+		*/
+		'allowed_types' => [ 'access', 'export', 'deletion', 'rectification' ],
+
+		'auto_process' => [
 			'access'   => true,
 			'export'   => true,
 			'deletion' => false,
@@ -264,6 +273,46 @@ return [
 		| middleware on an SPA route.
 		*/
 		'api_middleware' => [ 'web' ],
+	],
+
+	/*
+	|--------------------------------------------------------------------------
+	| Scheduling
+	|--------------------------------------------------------------------------
+	|
+	| Schedule entries the package adds to Laravel's scheduler automatically.
+	| Set `enabled` to false to opt out and run the command from your own
+	| `app/Console/Kernel.php` instead.
+	|
+	*/
+	'scheduling' => [
+		'purge_expired' => [
+			'enabled'  => true,
+			'cron'     => '0 3 * * *',
+			'prune'    => false,
+			'timezone' => null,
+		],
+	],
+
+	/*
+	|--------------------------------------------------------------------------
+	| Middleware
+	|--------------------------------------------------------------------------
+	|
+	| Behaviour for the `privacy.consent` route guard. `action` decides what
+	| happens when a required category is missing: `abort` returns the HTTP
+	| status below; `redirect` sends the visitor to `redirect_route` (when
+	| set) or `redirect_url`.
+	|
+	*/
+	'middleware' => [
+		'ensure_consent' => [
+			'action'         => env( 'PRIVACY_CONSENT_MIDDLEWARE_ACTION', 'abort' ),
+			'status'         => 403,
+			'message'        => 'Consent required.',
+			'redirect_route' => null,
+			'redirect_url'   => '/',
+		],
 	],
 
 	/*

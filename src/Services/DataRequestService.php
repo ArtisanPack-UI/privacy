@@ -22,6 +22,7 @@ namespace ArtisanPackUI\Privacy\Services;
 use ArtisanPackUI\Privacy\Events\DataAccessRequested;
 use ArtisanPackUI\Privacy\Events\DataDeletionRequested;
 use ArtisanPackUI\Privacy\Events\DataExportRequested;
+use ArtisanPackUI\Privacy\Events\DataRectificationRequested;
 use ArtisanPackUI\Privacy\Models\DataRequest;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
@@ -95,6 +96,25 @@ class DataRequestService
 		$request = $this->create( $subject, DataRequest::TYPE_DELETION, $reason );
 
 		Event::dispatch( new DataDeletionRequested( $request ) );
+
+		return $request;
+	}
+
+	/**
+	 * Creates a rectification request and fires {@see DataRectificationRequested}.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  Model        $subject Subject the request is filed for.
+	 * @param  string|null  $reason  Optional human-readable reason.
+	 *
+	 * @return DataRequest
+	 */
+	public function createRectificationRequest( Model $subject, ?string $reason = null ): DataRequest
+	{
+		$request = $this->create( $subject, DataRequest::TYPE_RECTIFICATION, $reason );
+
+		Event::dispatch( new DataRectificationRequested( $request ) );
 
 		return $request;
 	}
