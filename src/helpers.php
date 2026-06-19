@@ -7,8 +7,8 @@
  * Add your custom helper functions below.
  *
  * @since      1.0.0
- * @subpackage Privacy
  *
+ * @subpackage Privacy
  * @package    ArtisanPack_UI
  */
 

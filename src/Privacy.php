@@ -7,8 +7,8 @@
  * function or the Privacy facade.
  *
  * @since      1.0.0
- * @subpackage Privacy
  *
+ * @subpackage Privacy
  * @package    ArtisanPack_UI
  */
 
@@ -22,8 +22,8 @@ namespace ArtisanPackUI\Privacy;
  * Add your package methods and functionality here.
  *
  * @since      1.0.0
- * @subpackage Privacy
  *
+ * @subpackage Privacy
  * @package    ArtisanPack_UI
  */
 class Privacy
