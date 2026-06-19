@@ -1,12 +1,13 @@
 {
   "name": "artisanpack-ui/privacy",
-  "description": "package name",
+  "description": "Privacy and data protection toolkit for Laravel — consent management, data subject rights, and multi-regulation compliance (GDPR, CCPA, LGPD, PIPEDA).",
   "type": "library",
   "license": "GPL-3.0-or-later",
   "version": "1.0.0",
   "autoload": {
     "psr-4": {
-      "ArtisanPackUI\\Privacy\\": "src/"
+      "ArtisanPackUI\\Privacy\\": "src/",
+      "ArtisanPackUI\\Privacy\\Database\\Factories\\": "database/factories/"
     },
     "files": [
       "src/helpers.php"
@@ -26,6 +27,7 @@
   "require": {
     "php": "^8.2",
     "illuminate/support": "^10.0|^11.0|^12.0|^13.0",
+    "illuminate/database": "^10.0|^11.0|^12.0|^13.0",
     "artisanpack-ui/core": "^1.0"
   },
   "require-dev": {

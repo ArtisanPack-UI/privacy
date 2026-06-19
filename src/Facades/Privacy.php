@@ -6,8 +6,8 @@
  * Provides static access to the Privacy class.
  *
  * @since      1.0.0
- * @subpackage Privacy
  *
+ * @subpackage Privacy
  * @package    ArtisanPack_UI
  */
 
@@ -24,7 +24,6 @@ use Illuminate\Support\Facades\Facade;
  * @see        \ArtisanPackUI\Privacy\Privacy
  *
  * @subpackage Privacy
- *
  * @package    ArtisanPack_UI
  */
 class Privacy extends Facade
