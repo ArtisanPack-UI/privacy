@@ -250,11 +250,20 @@ return [
 	|
 	*/
 	'routes' => [
-		'enabled'        => true,
-		'prefix'         => 'privacy',
-		'middleware'     => [ 'web' ],
-		'api_prefix'     => 'api/privacy',
-		'api_middleware' => [ 'api' ],
+		'enabled'    => true,
+		'prefix'     => 'privacy',
+		'middleware' => [ 'web' ],
+		'api_prefix' => 'api/privacy',
+
+		/*
+		| The consent endpoints rely on session and cookie middleware so
+		| Auth::user() resolves and the consent cookie is readable, so
+		| `web` is the right default for stateful applications. Swap to
+		| `api` (or your own stack) only if you've layered session/cookie
+		| handling in elsewhere — for example via Sanctum's stateful
+		| middleware on an SPA route.
+		*/
+		'api_middleware' => [ 'web' ],
 	],
 
 	/*

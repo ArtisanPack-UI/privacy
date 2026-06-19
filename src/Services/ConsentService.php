@@ -203,12 +203,15 @@ class ConsentService
 		}
 
 		if ( $this->usesCookie() ) {
-			$cookie = $this->getConsentCookie() ?? [];
+			$cookie         = $this->getConsentCookie() ?? [];
+			$wasTrue        = ( $cookie[ $category ] ?? false ) === true;
+			$wasNotRecorded = ! array_key_exists( $category, $cookie );
 
-			if ( ( $cookie[ $category ] ?? false ) === true ) {
-				$cookie[ $category ] = false;
-				$this->setConsentCookie( $cookie );
-				$changed = true;
+			$cookie[ $category ] = false;
+			$this->setConsentCookie( $cookie );
+
+			if ( $wasTrue || $wasNotRecorded ) {
+				$changed = $changed || $wasTrue;
 			}
 		}
 
@@ -261,6 +264,91 @@ class ConsentService
 	}
 
 	/**
+	 * Syncs the cookie-based consent map into the database for the given subject.
+	 *
+	 * Intended for the moment a guest authenticates: any categories with a
+	 * `true` value in the cookie are recorded as database grants tied to the
+	 * authenticated subject; `false` values are recorded as withdrawals.
+	 * Skips no-ops, so calling this repeatedly is safe.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  Model  $user Subject that should own the synced rows.
+	 *
+	 * @return int Number of consents written (granted + revoked) during sync.
+	 */
+	public function syncCookieToDatabase( Model $user ): int
+	{
+		if ( ! $this->usesDatabase() ) {
+			return 0;
+		}
+
+		$cookie = $this->getConsentCookie();
+
+		if ( null === $cookie ) {
+			return 0;
+		}
+
+		$written = 0;
+
+		foreach ( $cookie as $category => $granted ) {
+			if ( ! is_string( $category ) ) {
+				continue;
+			}
+
+			if ( true === $granted ) {
+				$alreadyGranted = Consent::query()
+					->forSubject( $user )
+					->forCategory( $category )
+					->active()
+					->exists();
+
+				if ( $alreadyGranted ) {
+					continue;
+				}
+
+				$this->grantConsent( $category, $user, [ 'synced_from_cookie' => true ] );
+				$written++;
+				continue;
+			}
+
+			if ( false === $granted && $this->revokeConsent( $category, $user ) ) {
+				$written++;
+			}
+		}
+
+		return $written;
+	}
+
+	/**
+	 * Resolves a stable, opaque identifier for the current guest visitor.
+	 *
+	 * Strategy is controlled by `artisanpack.privacy.consent.guest_identifier`:
+	 *  - `session`     uses the current session id (falls back to ip when no session is bound)
+	 *  - `ip`          uses the request IP address
+	 *  - `fingerprint` (default) returns a sha-256 hash of session id + IP + user agent
+	 *
+	 * Returns null when no source is available (typical for console contexts).
+	 *
+	 * @since 1.0.0
+	 *
+	 * @return string|null
+	 */
+	public function resolveGuestIdentifier(): ?string
+	{
+		$strategy = (string) config( 'artisanpack.privacy.consent.guest_identifier', 'fingerprint' );
+		$ip       = $this->currentIpAddress();
+		$session  = function_exists( 'session' ) && session()->isStarted() ? session()->getId() : null;
+
+		return match ( $strategy ) {
+			'session'     => $session ?? $ip,
+			'ip'          => $ip,
+			'fingerprint' => $this->fingerprintIdentifier( $session, $ip, $this->currentUserAgent() ),
+			default       => $this->fingerprintIdentifier( $session, $ip, $this->currentUserAgent() ),
+		};
+	}
+
+	/**
 	 * Returns the consent map currently stored in the cookie jar.
 	 *
 	 * @since 1.0.0
@@ -283,6 +371,14 @@ class ConsentService
 	/**
 	 * Persists the given consent map in the cookie jar.
 	 *
+	 * The cookie is encrypted by Laravel's `EncryptCookies` middleware as
+	 * long as the cookie name is not added to the middleware's `$except`
+	 * list — that is the default and recommended setup.
+	 *
+	 * The current request's cookie bag is also updated so that subsequent
+	 * reads inside the same request (for example, the second iteration of
+	 * a multi-category grant) see the new state.
+	 *
 	 * @since 1.0.0
 	 *
 	 * @param  array<string, bool>  $consents Map of category => granted.
@@ -291,13 +387,17 @@ class ConsentService
 	 */
 	public function setConsentCookie( array $consents ): void
 	{
+		$encoded = json_encode( $consents );
+
 		Cookie::queue(
 			Cookie::make(
 				$this->cookieName(),
-				json_encode( $consents ),
+				$encoded,
 				$this->cookieLifetimeMinutes(),
 			),
 		);
+
+		Request::instance()->cookies->set( $this->cookieName(), $encoded );
 	}
 
 	/**
@@ -489,5 +589,31 @@ class ConsentService
 	protected function currentUserAgent(): ?string
 	{
 		return Request::userAgent();
+	}
+
+	/**
+	 * Builds a deterministic fingerprint identifier from the available
+	 * per-visitor signals. Returns null when none are available.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  string|null  $session   Session id, if any.
+	 * @param  string|null  $ip        IP address, if any.
+	 * @param  string|null  $userAgent User agent header, if any.
+	 *
+	 * @return string|null
+	 */
+	protected function fingerprintIdentifier( ?string $session, ?string $ip, ?string $userAgent ): ?string
+	{
+		$parts = array_filter(
+			[ $session, $ip, $userAgent ],
+			static fn ( ?string $value ): bool => null !== $value && '' !== $value,
+		);
+
+		if ( [] === $parts ) {
+			return null;
+		}
+
+		return hash( 'sha256', implode( '|', $parts ) );
 	}
 }

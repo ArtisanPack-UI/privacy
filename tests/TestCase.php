@@ -43,9 +43,15 @@ abstract class TestCase extends BaseTestCase
      */
     protected function getPackageProviders( $app ): array
     {
-        return [
+        $providers = [
             PrivacyServiceProvider::class,
         ];
+
+        if ( class_exists( \Livewire\LivewireServiceProvider::class ) ) {
+            array_unshift( $providers, \Livewire\LivewireServiceProvider::class );
+        }
+
+        return $providers;
     }
 
     /**
