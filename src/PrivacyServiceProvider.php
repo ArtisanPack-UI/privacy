@@ -37,15 +37,21 @@ use ArtisanPackUI\Privacy\Listeners\SyncConsentOnLogin;
 use ArtisanPackUI\Privacy\Livewire\ConsentPreferences;
 use ArtisanPackUI\Privacy\Livewire\CookieBanner;
 use ArtisanPackUI\Privacy\Livewire\DataRequestForm;
+use ArtisanPackUI\Privacy\Livewire\VerifyDataRequest;
 use ArtisanPackUI\Privacy\Services\AnonymizationService;
 use ArtisanPackUI\Privacy\Services\ConsentService;
+use ArtisanPackUI\Privacy\Services\DataDeletionService;
+use ArtisanPackUI\Privacy\Services\DataExportService;
 use ArtisanPackUI\Privacy\Services\DataRequestService;
+use ArtisanPackUI\Privacy\Services\VerificationService;
 use ArtisanPackUI\Privacy\View\PrivacyDirectives;
 use Illuminate\Auth\Events\Login;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
@@ -121,6 +127,18 @@ class PrivacyServiceProvider extends ServiceProvider
 
 		$this->app->singleton( AnonymizationService::class, fn () => new AnonymizationService() );
 		$this->app->alias( AnonymizationService::class, 'privacy.anonymization' );
+
+		$this->app->singleton( DataExportService::class, fn () => new DataExportService() );
+		$this->app->alias( DataExportService::class, 'privacy.export' );
+
+		$this->app->singleton(
+			DataDeletionService::class,
+			fn ( $app ) => new DataDeletionService( $app->make( AnonymizationService::class ) ),
+		);
+		$this->app->alias( DataDeletionService::class, 'privacy.deletion' );
+
+		$this->app->singleton( VerificationService::class, fn () => new VerificationService() );
+		$this->app->alias( VerificationService::class, 'privacy.verification' );
 	}
 
 	/**
@@ -151,11 +169,54 @@ class PrivacyServiceProvider extends ServiceProvider
 		$this->loadPackageViews();
 		$this->registerLivewireComponents();
 		$this->registerApiRoutes();
+		$this->registerWebRoutes();
 		$this->registerBladeDirectives();
 		$this->registerMiddlewareAliases();
+		$this->registerRateLimiters();
 		$this->registerViewComposers();
 		$this->registerConsoleCommands();
 		$this->registerScheduledTasks();
+	}
+
+	/**
+	 * Registers the package's web routes (verification + export downloads).
+	 *
+	 * @since 1.0.0
+	 *
+	 * @return void
+	 */
+	protected function registerWebRoutes(): void
+	{
+		if ( true !== (bool) config( 'artisanpack.privacy.routes.enabled', true ) ) {
+			return;
+		}
+
+		Route::group( [
+			'prefix'     => (string) config( 'artisanpack.privacy.routes.prefix', 'privacy' ),
+			'middleware' => (array) config( 'artisanpack.privacy.routes.middleware', [ 'web' ] ),
+		], function (): void {
+			$this->loadRoutesFrom( __DIR__ . '/../routes/web.php' );
+		} );
+	}
+
+	/**
+	 * Registers the named rate limiters used by the package's HTTP routes.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @return void
+	 */
+	protected function registerRateLimiters(): void
+	{
+		$rule               = (string) config( 'artisanpack.privacy.verification.rate_limit', '6,1' );
+		[ $hits, $minutes ] = array_pad( explode( ',', $rule ), 2, '1' );
+
+		RateLimiter::for( 'privacy-verification', static function ( $request ) use ( $hits, $minutes ) {
+			return Limit::perMinutes(
+				(int) $minutes,
+				(int) $hits,
+			)->by( $request->ip() ?: 'anon' );
+		} );
 	}
 
 	/**
@@ -373,5 +434,6 @@ class PrivacyServiceProvider extends ServiceProvider
 		\Livewire\Livewire::component( 'privacy-cookie-banner', CookieBanner::class );
 		\Livewire\Livewire::component( 'privacy-consent-preferences', ConsentPreferences::class );
 		\Livewire\Livewire::component( 'privacy-data-request-form', DataRequestForm::class );
+		\Livewire\Livewire::component( 'privacy-verify-data-request', VerifyDataRequest::class );
 	}
 }

@@ -20,8 +20,9 @@ use ArtisanPackUI\Privacy\Events\DataDeletionRequested;
 use ArtisanPackUI\Privacy\Events\DataExportRequested;
 use ArtisanPackUI\Privacy\Events\DataRectificationRequested;
 use ArtisanPackUI\Privacy\Models\DataRequest;
+use ArtisanPackUI\Privacy\Notifications\AdminDataRequestNotification;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Notification;
 
 /**
  * Sends a plain-text notification to `artisanpack.privacy.data_requests.admin_email`
@@ -116,20 +117,7 @@ class NotifyAdminOfRequest
 			return;
 		}
 
-		$body = sprintf(
-			"A new %s request has been filed.\n\nRequest ID: %s\nSubject: %s #%s\nRegulation: %s\nDue: %s",
-			$request->type,
-			(string) $request->getKey(),
-			(string) $request->requestable_type,
-			(string) $request->requestable_id,
-			(string) ( $request->regulation ?? 'n/a' ),
-			null !== $request->due_at ? $request->due_at->toIso8601String() : 'n/a',
-		);
-
-		Mail::raw( $body, function ( $message ) use ( $adminEmail, $request ): void {
-			$message
-				->to( $adminEmail )
-				->subject( sprintf( '[Privacy] New %s request #%s', $request->type, (string) $request->getKey() ) );
-		} );
+		Notification::route( 'mail', $adminEmail )
+			->notify( new AdminDataRequestNotification( $request ) );
 	}
 }
