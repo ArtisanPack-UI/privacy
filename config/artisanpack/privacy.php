@@ -154,6 +154,66 @@ return [
 
 	/*
 	|--------------------------------------------------------------------------
+	| Notifications
+	|--------------------------------------------------------------------------
+	|
+	| Channels and queue used by the package's data-request notifications.
+	| Each notification key (received/verification/processing/completed/
+	| rejected/admin) may override the channel list independently.
+	|
+	*/
+	'notifications' => [
+		'queue'    => env( 'PRIVACY_NOTIFICATIONS_QUEUE', 'default' ),
+		'channels' => [ 'mail', 'database' ],
+
+		'received'     => [ 'channels' => [ 'mail', 'database' ] ],
+		'verification' => [ 'channels' => [ 'mail' ] ],
+		'processing'   => [ 'channels' => [ 'database' ] ],
+		'completed'    => [ 'channels' => [ 'mail', 'database' ] ],
+		'rejected'     => [ 'channels' => [ 'mail', 'database' ] ],
+		'admin'        => [ 'channels' => [ 'mail' ] ],
+	],
+
+	/*
+	|--------------------------------------------------------------------------
+	| Data Export
+	|--------------------------------------------------------------------------
+	|
+	| File storage and signed-URL settings for `DataExportService::exportToFile()`.
+	|
+	*/
+	'export' => [
+		'disk'                    => env( 'PRIVACY_EXPORT_DISK', 'local' ),
+		'directory'               => 'privacy-exports',
+		'url_ttl'                 => (int) env( 'PRIVACY_EXPORT_URL_TTL', 60 ),
+		'file_retention_minutes'  => (int) env( 'PRIVACY_EXPORT_RETENTION_MINUTES', 1440 ),
+
+		/*
+		| Per-section row cap for export collection (consent history,
+		| activity log, data-request summary). Prevents OOM for very
+		| high-volume subjects. Raise if your compliance posture requires
+		| a complete export regardless of size.
+		*/
+		'row_cap' => (int) env( 'PRIVACY_EXPORT_ROW_CAP', 10000 ),
+	],
+
+	/*
+	|--------------------------------------------------------------------------
+	| Identity Verification
+	|--------------------------------------------------------------------------
+	|
+	| Settings for the data subject identity-verification flow that gates
+	| access/deletion/export requests. The token is stored on the request
+	| row and confirmed via the configured channel.
+	|
+	*/
+	'verification' => [
+		'token_ttl_minutes' => (int) env( 'PRIVACY_VERIFICATION_TTL', 60 ),
+		'rate_limit'        => env( 'PRIVACY_VERIFICATION_RATE_LIMIT', '6,1' ),
+	],
+
+	/*
+	|--------------------------------------------------------------------------
 	| Data Deletion Strategies
 	|--------------------------------------------------------------------------
 	|
@@ -188,6 +248,14 @@ return [
 		],
 		'hash_algorithm'          => 'sha256',
 		'pseudonymization_prefix' => 'Anon_',
+
+		/*
+		| Emit an audit-log entry (Log::info on the `privacy.anonymization`
+		| channel) every time a model has at least one field anonymized.
+		| Records only model class, primary key, and column names — never
+		| the original or transformed values.
+		*/
+		'audit' => true,
 	],
 
 	/*

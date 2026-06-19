@@ -8,6 +8,9 @@
  * strategy (`artisanpack.privacy.anonymization.strategies.{type}`), and
  * writes the transformed value back to the model.
  *
+ * Supports explicit field lists, batch processing, audit logging, and
+ * reversible pseudonymization via Laravel's encrypter.
+ *
  * @package    ArtisanPack_UI
  * @subpackage Privacy
  *
@@ -20,7 +23,10 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\Privacy\Services;
 
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Pure-PHP anonymization service.
@@ -36,13 +42,142 @@ class AnonymizationService
 	public const STRATEGY_GENERALIZE   = 'generalize';
 	public const STRATEGY_PSEUDONYMIZE = 'pseudonymize';
 
+	public const STRATEGY_REVERSIBLE_PSEUDONYMIZE = 'reversible_pseudonymize';
+
+	public const REVERSIBLE_PREFIX = 'rpsn:';
+
 	/**
-	 * Applies the configured strategies to every recognised personal-data
-	 * field on the model and persists the result.
+	 * Applies anonymization strategies to a model and persists the result.
 	 *
-	 * Returns true when at least one field was mutated and the model was
-	 * saved, false when nothing matched (so callers can warn about a no-op
-	 * anonymization).
+	 * When `$fields` is null the service uses pattern-based field discovery
+	 * via `artisanpack.privacy.discovery.field_patterns`. When `$fields` is
+	 * provided as `['column' => 'strategy', ...]` each column is anonymized
+	 * with the explicit strategy. As a shorthand, a numeric list of column
+	 * names will fall back to the column's configured strategy resolved by
+	 * the column's matched data-type.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  Model                            $model  Model to anonymize in place.
+	 * @param  array<int|string, string>|null   $fields Explicit field map, list of columns, or null for discovery.
+	 *
+	 * @return bool True when at least one column was mutated.
+	 */
+	public function anonymize( Model $model, ?array $fields = null ): bool
+	{
+		if ( null === $fields ) {
+			$mutated = $this->anonymizeByPatterns( $model );
+			$touched = $this->columnsTouchedByPatterns( $model );
+		} else {
+			$map     = $this->resolveFieldMap( $fields );
+			$mutated = $this->anonymizeFields( $model, $map );
+			$touched = array_keys( $map );
+		}
+
+		if ( $mutated ) {
+			$model->save();
+			$this->logAudit( $model, $touched );
+		}
+
+		return $mutated;
+	}
+
+	/**
+	 * Applies anonymization to every model in a collection or iterable.
+	 *
+	 * Returns the count of records that were actually mutated and saved;
+	 * records with no matching fields are skipped silently.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  iterable<int, Model>             $models  Models to anonymize.
+	 * @param  array<int|string, string>|null   $fields  Explicit field map or null for discovery.
+	 *
+	 * @return int Count of records anonymized and saved.
+	 */
+	public function anonymizeBatch( iterable $models, ?array $fields = null ): int
+	{
+		$count = 0;
+
+		foreach ( $models as $model ) {
+			if ( $this->anonymize( $model, $fields ) ) {
+				++$count;
+			}
+		}
+
+		return $count;
+	}
+
+	/**
+	 * Applies a strategy to a single value (without touching a model).
+	 *
+	 * Alias kept for the AC contract from issue #19.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  string  $value    Original value.
+	 * @param  string  $strategy Strategy key.
+	 * @param  string  $type     Optional data-type hint.
+	 *
+	 * @return string
+	 */
+	public function anonymizeField( string $value, string $strategy, string $type = '' ): string
+	{
+		return $this->applyStrategy( $value, $strategy, $type );
+	}
+
+	/**
+	 * Applies a single strategy to a single value.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  string  $value    Original value.
+	 * @param  string  $strategy Strategy key.
+	 * @param  string  $type     Data-type hint (used by generalize/truncate).
+	 *
+	 * @return string
+	 */
+	public function applyStrategy( string $value, string $strategy, string $type = '' ): string
+	{
+		return match ( $strategy ) {
+			self::STRATEGY_MASK                     => $this->mask( $value ),
+			self::STRATEGY_REDACT                   => '[REDACTED]',
+			self::STRATEGY_HASH                     => hash( $this->hashAlgorithm(), $value ),
+			self::STRATEGY_TRUNCATE                 => $this->truncate( $value, $type ),
+			self::STRATEGY_GENERALIZE               => $this->generalize( $value, $type ),
+			self::STRATEGY_PSEUDONYMIZE             => $this->pseudonymize( $value ),
+			self::STRATEGY_REVERSIBLE_PSEUDONYMIZE  => $this->reversiblePseudonymize( $value ),
+			default                                 => '[REDACTED]',
+		};
+	}
+
+	/**
+	 * Returns the original value for a reversible pseudonym, or null if the
+	 * value is not a recognized reversible pseudonym.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  string  $value Pseudonymized value (must start with REVERSIBLE_PREFIX).
+	 *
+	 * @return string|null
+	 */
+	public function reverse( string $value ): ?string
+	{
+		if ( ! str_starts_with( $value, self::REVERSIBLE_PREFIX ) ) {
+			return null;
+		}
+
+		$payload = substr( $value, strlen( self::REVERSIBLE_PREFIX ) );
+
+		try {
+			return Crypt::decryptString( $payload );
+		} catch ( DecryptException ) {
+			return null;
+		}
+	}
+
+	/**
+	 * Anonymizes a model using pattern-based discovery (legacy behaviour).
 	 *
 	 * @since 1.0.0
 	 *
@@ -50,7 +185,7 @@ class AnonymizationService
 	 *
 	 * @return bool
 	 */
-	public function anonymize( Model $model ): bool
+	protected function anonymizeByPatterns( Model $model ): bool
 	{
 		$strategies = (array) config( 'artisanpack.privacy.anonymization.strategies', [] );
 		$mutated    = false;
@@ -72,35 +207,111 @@ class AnonymizationService
 			$mutated = true;
 		}
 
-		if ( $mutated ) {
-			$model->save();
+		return $mutated;
+	}
+
+	/**
+	 * Returns the list of columns the pattern-driven path actually mutated
+	 * (used for audit logging).
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  Model  $model Model that was just mutated.
+	 *
+	 * @return array<int, string>
+	 */
+	protected function columnsTouchedByPatterns( Model $model ): array
+	{
+		return array_values( array_keys( $model->getDirty() ) );
+	}
+
+	/**
+	 * Applies the resolved column/strategy map to the model.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  Model                  $model Model to mutate.
+	 * @param  array<string, string>  $map   Column => strategy map.
+	 *
+	 * @return bool
+	 */
+	protected function anonymizeFields( Model $model, array $map ): bool
+	{
+		$mutated = false;
+
+		foreach ( $map as $column => $strategy ) {
+			$value = $model->getAttribute( $column );
+
+			if ( null === $value || '' === $value ) {
+				continue;
+			}
+
+			$type = $this->guessTypeForColumn( $column );
+
+			$model->setAttribute( $column, $this->applyStrategy( (string) $value, $strategy, $type ) );
+			$mutated = true;
 		}
 
 		return $mutated;
 	}
 
 	/**
-	 * Applies a single strategy to a single value.
+	 * Normalises the `$fields` argument into a `column => strategy` map.
+	 *
+	 * Numeric entries are resolved against the configured per-type strategy
+	 * via the discovery patterns; associative entries are passed through.
 	 *
 	 * @since 1.0.0
 	 *
-	 * @param  string  $value    Original value.
-	 * @param  string  $strategy Strategy key.
-	 * @param  string  $type     Data-type hint (used by generalize/truncate).
+	 * @param  array<int|string, string>  $fields Field argument from caller.
+	 *
+	 * @return array<string, string>
+	 */
+	protected function resolveFieldMap( array $fields ): array
+	{
+		$map = [];
+
+		foreach ( $fields as $key => $value ) {
+			if ( is_int( $key ) ) {
+				$column   = (string) $value;
+				$type     = $this->guessTypeForColumn( $column );
+				$strategy = (string) config(
+					"artisanpack.privacy.anonymization.strategies.{$type}",
+					self::STRATEGY_REDACT,
+				);
+
+				$map[ $column ] = $strategy;
+				continue;
+			}
+
+			$map[ (string) $key ] = (string) $value;
+		}
+
+		return $map;
+	}
+
+	/**
+	 * Reverse-resolves a column name to a configured data-type key via the
+	 * discovery patterns. Falls back to the column name itself when no
+	 * pattern matches.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  string  $column Column name.
 	 *
 	 * @return string
 	 */
-	public function applyStrategy( string $value, string $strategy, string $type = '' ): string
+	protected function guessTypeForColumn( string $column ): string
 	{
-		return match ( $strategy ) {
-			self::STRATEGY_MASK         => $this->mask( $value ),
-			self::STRATEGY_REDACT       => '[REDACTED]',
-			self::STRATEGY_HASH         => hash( $this->hashAlgorithm(), $value ),
-			self::STRATEGY_TRUNCATE     => $this->truncate( $value, $type ),
-			self::STRATEGY_GENERALIZE   => $this->generalize( $value, $type ),
-			self::STRATEGY_PSEUDONYMIZE => $this->pseudonymize( $value ),
-			default                     => '[REDACTED]',
-		};
+		$patterns = (array) config( 'artisanpack.privacy.discovery.field_patterns', [] );
+
+		foreach ( $patterns as $type => $columns ) {
+			if ( in_array( $column, (array) $columns, true ) ) {
+				return (string) $type;
+			}
+		}
+
+		return $column;
 	}
 
 	/**
@@ -212,6 +423,21 @@ class AnonymizationService
 	}
 
 	/**
+	 * Produces a reversible pseudonym using Laravel's encrypter. The original
+	 * value can be recovered via {@see reverse()}.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  string  $value Original value.
+	 *
+	 * @return string
+	 */
+	protected function reversiblePseudonymize( string $value ): string
+	{
+		return self::REVERSIBLE_PREFIX . Crypt::encryptString( $value );
+	}
+
+	/**
 	 * Finds the first column on the model that matches one of the
 	 * configured patterns for the given data type.
 	 *
@@ -246,5 +472,31 @@ class AnonymizationService
 	protected function hashAlgorithm(): string
 	{
 		return (string) config( 'artisanpack.privacy.anonymization.hash_algorithm', 'sha256' );
+	}
+
+	/**
+	 * Emits an audit-log entry describing which model/columns were anonymized.
+	 *
+	 * Records column names only — never the original or transformed values —
+	 * so audit logs remain safe to persist under regulatory retention rules.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  Model               $model    Model that was mutated.
+	 * @param  array<int, string>  $columns  Columns that were touched.
+	 *
+	 * @return void
+	 */
+	protected function logAudit( Model $model, array $columns ): void
+	{
+		if ( true !== (bool) config( 'artisanpack.privacy.anonymization.audit', true ) ) {
+			return;
+		}
+
+		Log::info( 'privacy.anonymization', [
+			'model'   => $model::class,
+			'key'     => $model->getKey(),
+			'columns' => $columns,
+		] );
 	}
 }

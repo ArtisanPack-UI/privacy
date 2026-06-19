@@ -51,6 +51,10 @@ class ProcessDataExportRequest
 			return;
 		}
 
+		if ( true === (bool) config( 'artisanpack.privacy.data_requests.require_verification', true ) && null === $request->verified_at ) {
+			return;
+		}
+
 		$request->update( [ 'status' => DataRequest::STATUS_PROCESSING ] );
 
 		DataRequestLog::query()->create( [

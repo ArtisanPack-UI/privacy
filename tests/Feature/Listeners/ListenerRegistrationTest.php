@@ -12,10 +12,11 @@ use ArtisanPackUI\Privacy\Models\BreachNotification;
 use ArtisanPackUI\Privacy\Models\Consent;
 use ArtisanPackUI\Privacy\Models\DataRequest;
 use ArtisanPackUI\Privacy\Models\DataRequestLog;
+use ArtisanPackUI\Privacy\Notifications\AdminDataRequestNotification;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Schema;
 use Mockery as M;
 use Tests\Support\TestSubject;
@@ -58,6 +59,7 @@ it( 'logs an info entry when LogConsentActivity handles ConsentWithdrawn', funct
 it( 'marks an access request as processing when auto-process is enabled', function (): void {
 	config()->set( 'artisanpack.privacy.data_requests.auto_process.access', true );
 	config()->set( 'artisanpack.privacy.data_requests.notify_admin', false );
+	config()->set( 'artisanpack.privacy.data_requests.require_verification', false );
 
 	$request = DataRequest::factory()->create( [
 		'type'             => DataRequest::TYPE_ACCESS,
@@ -91,6 +93,7 @@ it( 'leaves an access request untouched when auto-process is disabled', function
 it( 'marks an export request as processing when auto-process is enabled', function (): void {
 	config()->set( 'artisanpack.privacy.data_requests.auto_process.export', true );
 	config()->set( 'artisanpack.privacy.data_requests.notify_admin', false );
+	config()->set( 'artisanpack.privacy.data_requests.require_verification', false );
 
 	$request = DataRequest::factory()->create( [
 		'type'             => DataRequest::TYPE_EXPORT,
@@ -109,7 +112,7 @@ it( 'emails the admin when notify_admin is enabled and an access request is disp
 	config()->set( 'artisanpack.privacy.data_requests.admin_email', 'admin@example.com' );
 	config()->set( 'artisanpack.privacy.data_requests.auto_process.access', false );
 
-	Mail::spy();
+	Notification::fake();
 
 	$request = DataRequest::factory()->create( [
 		'type'             => DataRequest::TYPE_ACCESS,
@@ -120,14 +123,14 @@ it( 'emails the admin when notify_admin is enabled and an access request is disp
 
 	DataAccessRequested::dispatch( $request->fresh() );
 
-	Mail::shouldHaveReceived( 'raw' )->once();
+	Notification::assertSentOnDemand( AdminDataRequestNotification::class );
 } );
 
 it( 'emails the admin for a deletion request when notify_admin is enabled', function (): void {
 	config()->set( 'artisanpack.privacy.data_requests.notify_admin', true );
 	config()->set( 'artisanpack.privacy.data_requests.admin_email', 'admin@example.com' );
 
-	Mail::spy();
+	Notification::fake();
 
 	$request = DataRequest::factory()->create( [
 		'type'             => DataRequest::TYPE_DELETION,
@@ -138,13 +141,13 @@ it( 'emails the admin for a deletion request when notify_admin is enabled', func
 
 	DataDeletionRequested::dispatch( $request->fresh() );
 
-	Mail::shouldHaveReceived( 'raw' )->once();
+	Notification::assertSentOnDemand( AdminDataRequestNotification::class );
 } );
 
 it( 'does not email the admin when notify_admin is disabled', function (): void {
 	config()->set( 'artisanpack.privacy.data_requests.notify_admin', false );
 
-	Mail::spy();
+	Notification::fake();
 
 	$request = DataRequest::factory()->create( [
 		'type'             => DataRequest::TYPE_DELETION,
@@ -155,13 +158,13 @@ it( 'does not email the admin when notify_admin is disabled', function (): void 
 
 	DataDeletionRequested::dispatch( $request->fresh() );
 
-	Mail::shouldNotHaveReceived( 'raw' );
+	Notification::assertNothingSent();
 } );
 
 it( 'starts the breach workflow when NotifyDataBreach handles a DataBreach', function (): void {
 	config()->set( 'artisanpack.privacy.data_requests.admin_email', 'admin@example.com' );
 
-	Mail::spy();
+	Illuminate\Support\Facades\Mail::spy();
 	Log::spy();
 
 	$breach = BreachNotification::factory()->create();
@@ -171,7 +174,7 @@ it( 'starts the breach workflow when NotifyDataBreach handles a DataBreach', fun
 	Log::shouldHaveReceived( 'critical' )
 		->with( 'privacy.data_breach.reported', M::on( fn ( array $context ): bool => $context['breach_id'] === $breach->id ) )
 		->once();
-	Mail::shouldHaveReceived( 'raw' )->once();
+	Illuminate\Support\Facades\Mail::shouldHaveReceived( 'raw' )->once();
 } );
 
 it( 'syncs cookie consents to the database on Login via SyncConsentOnLogin', function (): void {

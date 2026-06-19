@@ -77,6 +77,69 @@ it( 'anonymizes a model in place based on configured strategies', function (): v
 	expect( $subject->name )->toStartWith( 'Anon_' );
 } );
 
+it( 'anonymizes only the explicitly listed fields with an explicit strategy', function (): void {
+	$subject = AnonSubject::create( [
+		'email' => 'jacob@example.com',
+		'name'  => 'Jacob Martella',
+		'phone' => '555-1234',
+	] );
+
+	$mutated = app( AnonymizationService::class )->anonymize( $subject, [
+		'email' => AnonymizationService::STRATEGY_REDACT,
+	] );
+
+	expect( $mutated )->toBeTrue();
+	$subject->refresh();
+	expect( $subject->email )->toBe( '[REDACTED]' );
+	expect( $subject->name )->toBe( 'Jacob Martella' );
+	expect( $subject->phone )->toBe( '555-1234' );
+} );
+
+it( 'resolves a numeric field list to the configured per-type strategy', function (): void {
+	$subject = AnonSubject::create( [
+		'email' => 'jacob@example.com',
+		'phone' => '555-1234',
+	] );
+
+	app( AnonymizationService::class )->anonymize( $subject, [ 'email', 'phone' ] );
+
+	$subject->refresh();
+	expect( $subject->email )->toBe( 'j***@e***.com' );
+	expect( $subject->phone )->toBe( '[REDACTED]' );
+} );
+
+it( 'anonymizes a batch of models and returns the count mutated', function (): void {
+	$a = AnonSubject::create( [ 'email' => 'a@example.com' ] );
+	$b = AnonSubject::create( [ 'email' => 'b@example.com' ] );
+	$c = AnonSubject::create( [ 'email' => null ] );
+
+	$count = app( AnonymizationService::class )->anonymizeBatch( [ $a, $b, $c ] );
+
+	expect( $count )->toBe( 2 );
+} );
+
+it( 'reversibly pseudonymizes and recovers the original value', function (): void {
+	$service = app( AnonymizationService::class );
+	$token   = $service->applyStrategy( 'jacob@example.com', AnonymizationService::STRATEGY_REVERSIBLE_PSEUDONYMIZE );
+
+	expect( $token )->toStartWith( AnonymizationService::REVERSIBLE_PREFIX );
+	expect( $service->reverse( $token ) )->toBe( 'jacob@example.com' );
+} );
+
+it( 'returns null when reversing a value that is not a reversible pseudonym', function (): void {
+	$service = app( AnonymizationService::class );
+
+	expect( $service->reverse( 'plain string' ) )->toBeNull();
+	expect( $service->reverse( AnonymizationService::REVERSIBLE_PREFIX . 'not-a-real-token' ) )->toBeNull();
+} );
+
+it( 'exposes anonymizeField as an alias for applyStrategy', function (): void {
+	$service = app( AnonymizationService::class );
+
+	expect( $service->anonymizeField( 'jacob@example.com', AnonymizationService::STRATEGY_MASK, 'email' ) )
+		->toBe( $service->applyStrategy( 'jacob@example.com', AnonymizationService::STRATEGY_MASK, 'email' ) );
+} );
+
 it( 'returns false when no personal-data columns match', function (): void {
 	Schema::create( 'plain_subjects', function ( Blueprint $table ): void {
 		$table->id();

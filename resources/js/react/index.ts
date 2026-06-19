@@ -10,6 +10,8 @@ export { ConsentPreferences } from './ConsentPreferences';
 export type { ConsentPreferencesProps } from './ConsentPreferences';
 export { DataRequestForm } from './DataRequestForm';
 export type { DataRequestFormProps, DataRequestResult, DataRequestType } from './DataRequestForm';
+export { VerifyDataRequest } from './VerifyDataRequest';
+export type { VerifyDataRequestProps } from './VerifyDataRequest';
 export { useConsent } from './useConsent';
 export type { UseConsentOptions, UseConsentResult } from './useConsent';
 export type {
