@@ -21,7 +21,9 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\Privacy;
 
 use ArtisanPackUI\Privacy\Console\Commands\PrivacyInstall;
+use ArtisanPackUI\Privacy\Console\Commands\PrivacyReport;
 use ArtisanPackUI\Privacy\Console\Commands\PrivacyScan;
+use ArtisanPackUI\Privacy\Console\Commands\ProcessDataRequests;
 use ArtisanPackUI\Privacy\Console\Commands\PurgeExpiredConsents;
 use ArtisanPackUI\Privacy\Events\ConsentGiven;
 use ArtisanPackUI\Privacy\Events\ConsentWithdrawn;
@@ -414,6 +416,8 @@ class PrivacyServiceProvider extends ServiceProvider
 			PurgeExpiredConsents::class,
 			PrivacyScan::class,
 			PrivacyInstall::class,
+			ProcessDataRequests::class,
+			PrivacyReport::class,
 		] );
 	}
 
