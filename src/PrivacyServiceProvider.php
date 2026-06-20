@@ -35,17 +35,22 @@ use ArtisanPackUI\Privacy\Listeners\NotifyDataBreach;
 use ArtisanPackUI\Privacy\Listeners\ProcessDataAccessRequest;
 use ArtisanPackUI\Privacy\Listeners\ProcessDataExportRequest;
 use ArtisanPackUI\Privacy\Listeners\SyncConsentOnLogin;
+use ArtisanPackUI\Privacy\Livewire\Admin\ConsentManager;
+use ArtisanPackUI\Privacy\Livewire\Admin\DataRequestManager;
 use ArtisanPackUI\Privacy\Livewire\ConsentPreferences;
 use ArtisanPackUI\Privacy\Livewire\CookieBanner;
 use ArtisanPackUI\Privacy\Livewire\DataRequestForm;
 use ArtisanPackUI\Privacy\Livewire\PrivacyDashboard;
 use ArtisanPackUI\Privacy\Livewire\VerifyDataRequest;
+use ArtisanPackUI\Privacy\Regulations\Ccpa;
+use ArtisanPackUI\Privacy\Regulations\Gdpr;
 use ArtisanPackUI\Privacy\Regulations\RegulationRegistry;
 use ArtisanPackUI\Privacy\Services\AnonymizationService;
 use ArtisanPackUI\Privacy\Services\ConsentService;
 use ArtisanPackUI\Privacy\Services\DataDeletionService;
 use ArtisanPackUI\Privacy\Services\DataExportService;
 use ArtisanPackUI\Privacy\Services\DataRequestService;
+use ArtisanPackUI\Privacy\Services\GeoLocationService;
 use ArtisanPackUI\Privacy\Services\PersonalDataScanner;
 use ArtisanPackUI\Privacy\Services\VerificationService;
 use ArtisanPackUI\Privacy\View\PrivacyDirectives;
@@ -144,11 +149,20 @@ class PrivacyServiceProvider extends ServiceProvider
 		$this->app->singleton( VerificationService::class, fn () => new VerificationService() );
 		$this->app->alias( VerificationService::class, 'privacy.verification' );
 
-		$this->app->singleton( RegulationRegistry::class, fn () => new RegulationRegistry() );
+		$this->app->singleton( RegulationRegistry::class, function (): RegulationRegistry {
+			$registry = new RegulationRegistry();
+			$registry->registerClass( 'gdpr', Gdpr::class );
+			$registry->registerClass( 'ccpa', Ccpa::class );
+
+			return $registry;
+		} );
 		$this->app->alias( RegulationRegistry::class, 'privacy.regulations' );
 
 		$this->app->singleton( PersonalDataScanner::class, fn () => new PersonalDataScanner() );
 		$this->app->alias( PersonalDataScanner::class, 'privacy.scanner' );
+
+		$this->app->singleton( GeoLocationService::class, fn () => new GeoLocationService() );
+		$this->app->alias( GeoLocationService::class, 'privacy.geolocation' );
 	}
 
 	/**
@@ -370,6 +384,7 @@ class PrivacyServiceProvider extends ServiceProvider
 
 		$router->aliasMiddleware( 'privacy.consent', Http\Middleware\EnsureConsentGiven::class );
 		$router->aliasMiddleware( 'privacy.context', Http\Middleware\CheckCookieConsent::class );
+		$router->aliasMiddleware( 'privacy.geolocate', Http\Middleware\GeolocateUser::class );
 	}
 
 	/**
@@ -459,5 +474,7 @@ class PrivacyServiceProvider extends ServiceProvider
 		\Livewire\Livewire::component( 'privacy-data-request-form', DataRequestForm::class );
 		\Livewire\Livewire::component( 'privacy-verify-data-request', VerifyDataRequest::class );
 		\Livewire\Livewire::component( 'privacy-dashboard', PrivacyDashboard::class );
+		\Livewire\Livewire::component( 'privacy-admin-consent-manager', ConsentManager::class );
+		\Livewire\Livewire::component( 'privacy-admin-data-request-manager', DataRequestManager::class );
 	}
 }

@@ -306,6 +306,16 @@ return [
 		'provider'        => env( 'PRIVACY_GEOLOCATION_PROVIDER', 'ip-api' ),
 		'cache_duration'  => 1440,
 		'fallback_region' => env( 'PRIVACY_FALLBACK_REGION' ),
+
+		/*
+		| MaxMind GeoIP2 database path, used when `provider` is set to
+		| `maxmind`. Requires the `geoip2/geoip2` Composer package; resolve
+		| the path with `storage_path()` so the database can live outside
+		| the repo.
+		*/
+		'maxmind' => [
+			'database' => env( 'PRIVACY_MAXMIND_DATABASE' ),
+		],
 	],
 
 	/*
