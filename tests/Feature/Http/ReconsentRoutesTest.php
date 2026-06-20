@@ -57,6 +57,50 @@ it( 'returns 409 when the supplied version is no longer current', function (): v
 		->assertJsonPath( 'ok', false );
 } );
 
+it( 'refuses to redirect off-host and falls back to /', function (): void {
+	$subject = TestSubject::create();
+	Consent::factory()->create( [
+		'consentable_type' => $subject->getMorphClass(),
+		'consentable_id'   => $subject->getKey(),
+		'policy_version'   => '0.9.0',
+	] );
+	PrivacyPolicy::factory()->active()->create( [
+		'requires_reconsent' => true,
+		'version'            => '1.0.0',
+	] );
+
+	$response = $this->actingAs( $subject )
+		->withHeaders( [ 'Accept' => 'text/html' ] )
+		->post( '/privacy/reconsent', [
+			'version'  => '1.0.0',
+			'redirect' => 'https://evil.example/login',
+		] );
+
+	$response->assertRedirect( '/' );
+} );
+
+it( 'honours same-host redirects after a successful reconsent', function (): void {
+	$subject = TestSubject::create();
+	Consent::factory()->create( [
+		'consentable_type' => $subject->getMorphClass(),
+		'consentable_id'   => $subject->getKey(),
+		'policy_version'   => '0.9.0',
+	] );
+	PrivacyPolicy::factory()->active()->create( [
+		'requires_reconsent' => true,
+		'version'            => '1.0.0',
+	] );
+
+	$response = $this->actingAs( $subject )
+		->withHeaders( [ 'Accept' => 'text/html' ] )
+		->post( '/privacy/reconsent', [
+			'version'  => '1.0.0',
+			'redirect' => '/account',
+		] );
+
+	$response->assertRedirect( '/account' );
+} );
+
 it( 'returns 401 for guests', function (): void {
 	PrivacyPolicy::factory()->active()->create( [
 		'requires_reconsent' => true,

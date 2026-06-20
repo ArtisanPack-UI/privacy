@@ -75,9 +75,32 @@ it( 'falls back to extracting from content when sections are empty', function ()
 	expect( $policy->tableOfContents() )->toHaveCount( 2 );
 } );
 
-it( 'produces a sortable version key', function (): void {
-	$ten  = PrivacyPolicy::factory()->make( [ 'version' => '1.10.0' ] );
-	$nine = PrivacyPolicy::factory()->make( [ 'version' => '1.9.0' ] );
+it( 'deactivates the previously-active general policy on publish even when regulation is NULL', function (): void {
+	$old = PrivacyPolicy::factory()->active()->create( [
+		'regulation' => null,
+		'locale'     => 'en',
+		'version'    => '1.0.0',
+	] );
+	$new = PrivacyPolicy::factory()->create( [
+		'regulation' => null,
+		'locale'     => 'en',
+		'version'    => '1.1.0',
+		'active'     => false,
+	] );
 
-	expect( $ten->versionSortKey() > $nine->versionSortKey() )->toBeTrue();
+	$new->publish();
+
+	expect( $old->fresh()->active )->toBeFalse();
+	expect( $new->fresh()->active )->toBeTrue();
+} );
+
+it( 'sanitises raw HTML when rendering the policy body', function (): void {
+	$policy = PrivacyPolicy::factory()->create( [
+		'content' => "# Hello\n\n<script>alert(1)</script>\n",
+	] );
+
+	$html = $policy->renderHtml();
+
+	expect( $html )->not->toContain( '<script>' );
+	expect( $html )->toContain( 'alert(1)' );
 } );

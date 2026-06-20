@@ -119,8 +119,12 @@ class PrivacyPolicy extends Model
 	}
 
 	/**
-	 * Scope: ordered most-recent-version first using {@see versionSortKey()}
-	 * so semantic versions like `1.10.0` correctly outrank `1.9.0`.
+	 * Scope: ordered most-recent-published first, falling back to id for
+	 * ties (batch publishes or seeded fixtures).
+	 *
+	 * Note: this orders by `published_at`, not by semver. Operators that
+	 * publish out-of-order hotfixes to an older version line should set
+	 * `published_at` accordingly — the database has no semver awareness.
 	 *
 	 * @since 1.0.0
 	 *
@@ -154,6 +158,12 @@ class PrivacyPolicy extends Model
 	 * atomic — callers can rely on `PrivacyPolicy::active()->first()`
 	 * returning the new row immediately after this method returns.
 	 *
+	 * Persists the model first (so unsaved-model callers don't bypass the
+	 * deactivation step via a NULL primary key), then deactivates any
+	 * sibling that shares regulation+locale using `whereNull()` for
+	 * general policies — `WHERE regulation = NULL` is UNKNOWN and would
+	 * silently skip the swap.
+	 *
 	 * @since 1.0.0
 	 *
 	 * @return self
@@ -161,17 +171,23 @@ class PrivacyPolicy extends Model
 	public function publish(): self
 	{
 		return DB::transaction( function (): self {
-			static::query()
-				->where( 'id', '!=', $this->getKey() )
-				->where( 'regulation', $this->regulation )
-				->where( 'locale', $this->locale )
-				->where( 'active', true )
-				->update( [ 'active' => false ] );
-
 			$this->forceFill( [
 				'active'       => true,
 				'published_at' => $this->published_at ?? Carbon::now(),
 			] )->save();
+
+			$query = static::query()
+				->where( 'id', '!=', $this->getKey() )
+				->where( 'locale', $this->locale )
+				->where( 'active', true );
+
+			if ( null === $this->regulation ) {
+				$query->whereNull( 'regulation' );
+			} else {
+				$query->where( 'regulation', $this->regulation );
+			}
+
+			$query->update( [ 'active' => false ] );
 
 			return $this;
 		} );
@@ -195,13 +211,21 @@ class PrivacyPolicy extends Model
 	/**
 	 * Renders the Markdown body as HTML using Laravel's commonmark wrapper.
 	 *
+	 * Forces commonmark to escape raw HTML and strip unsafe links so any
+	 * value smuggled through a template placeholder (company name from
+	 * config, admin-edited content) cannot land as stored XSS on the
+	 * public policy view.
+	 *
 	 * @since 1.0.0
 	 *
 	 * @return string
 	 */
 	public function renderHtml(): string
 	{
-		return Str::markdown( (string) $this->content );
+		return Str::markdown( (string) $this->content, [
+			'html_input'         => 'escape',
+			'allow_unsafe_links' => false,
+		] );
 	}
 
 	/**
@@ -221,35 +245,6 @@ class PrivacyPolicy extends Model
 
 		return ( new \ArtisanPackUI\Privacy\Services\PrivacyPolicyGenerator() )
 			->extractSections( (string) $this->content );
-	}
-
-	/**
-	 * Returns a sortable key for the policy's version string. Two- or
-	 * three-segment semver-style strings are zero-padded so lexical sorts
-	 * are correct (`1.10.0` → `0001.0010.0000`).
-	 *
-	 * @since 1.0.0
-	 *
-	 * @return string
-	 */
-	public function versionSortKey(): string
-	{
-		$parts = preg_split( '/[\.\-+]/', (string) $this->version ) ?: [];
-		$parts = array_slice( $parts, 0, 3 );
-
-		while ( count( $parts ) < 3 ) {
-			$parts[] = '0';
-		}
-
-		return implode( '.', array_map(
-			static fn ( string $part ): string => str_pad(
-				preg_replace( '/[^0-9]/', '', $part ) ?: '0',
-				4,
-				'0',
-				STR_PAD_LEFT,
-			),
-			$parts,
-		) );
 	}
 
 	/**

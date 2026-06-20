@@ -45,6 +45,8 @@
 	x-transition:enter-start="{{ $enterStart }}"
 	x-transition:enter-end="{{ $enterEnd }}"
 	x-transition:leave="transition ease-in duration-200"
+	x-transition:leave-start="{{ $enterEnd }}"
+	x-transition:leave-end="{{ $enterStart }}"
 	x-trap.noscroll.inert="visible && '{{ $this->style }}' === 'modal'"
 	role="dialog"
 	aria-modal="{{ $this->style === 'modal' ? 'true' : 'false' }}"

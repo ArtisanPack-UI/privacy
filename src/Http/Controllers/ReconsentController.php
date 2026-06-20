@@ -76,11 +76,44 @@ class ReconsentController
 			] );
 		}
 
-		$redirect = $data['redirect'] ?? $request->headers->get( 'referer' );
-
 		return redirect()->to(
-			is_string( $redirect ) && '' !== $redirect ? $redirect : '/',
+			$this->resolveSafeRedirect( $request, $data['redirect'] ?? null ),
 		);
+	}
+
+	/**
+	 * Resolves the post-success redirect, refusing any URL that points
+	 * off-host so a crafted form body or Referer header cannot turn the
+	 * reconsent endpoint into an open redirect after a successful
+	 * acceptance.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  Request      $request  Incoming request.
+	 * @param  string|null  $supplied User-supplied redirect target.
+	 *
+	 * @return string
+	 */
+	protected function resolveSafeRedirect( Request $request, ?string $supplied ): string
+	{
+		foreach ( [ $supplied, $request->headers->get( 'referer' ) ] as $candidate ) {
+			if ( ! is_string( $candidate ) || '' === $candidate ) {
+				continue;
+			}
+
+			$parsed = parse_url( $candidate );
+
+			// Relative URLs (no scheme + no host) are always safe to honour.
+			if ( ! isset( $parsed['host'] ) && ! isset( $parsed['scheme'] ) ) {
+				return $candidate;
+			}
+
+			if ( isset( $parsed['host'] ) && $parsed['host'] === $request->getHost() ) {
+				return $candidate;
+			}
+		}
+
+		return '/';
 	}
 
 	/**

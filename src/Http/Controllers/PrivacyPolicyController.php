@@ -137,9 +137,14 @@ class PrivacyPolicyController
 	}
 
 	/**
-	 * Resolves the active policy by stepping through three preferences:
-	 * the regulation matching the request, then a general policy, then
-	 * any active policy for the requested locale.
+	 * Resolves the active policy. Tries the regulation-specific row first
+	 * (in the requested locale, falling back to any locale of the same
+	 * regulation), then a general (regulation IS NULL) row in the requested
+	 * locale, then the general row in any locale.
+	 *
+	 * Importantly, the final fallback is the general policy — not any
+	 * active policy — so a GDPR visitor never lands on a CCPA policy
+	 * just because no general policy is published.
 	 *
 	 * @since 1.0.0
 	 *
@@ -151,21 +156,43 @@ class PrivacyPolicyController
 	protected function resolveActivePolicy( Request $request, string $locale ): ?PrivacyPolicy
 	{
 		$regulation = $this->resolveRegulation( $request );
-
-		$query = PrivacyPolicy::query()->active()->forLocale( $locale )->latestFirst();
+		$base       = PrivacyPolicy::query()->active()->latestFirst();
 
 		if ( null !== $regulation ) {
-			$match = ( clone $query )->forRegulation( $regulation )->first();
+			$specific = $this->firstForLocale(
+				( clone $base )->forRegulation( $regulation ),
+				$locale,
+			);
 
-			if ( $match instanceof PrivacyPolicy ) {
-				return $match;
+			if ( $specific instanceof PrivacyPolicy ) {
+				return $specific;
 			}
 		}
 
-		$general = ( clone $query )->forRegulation( null )->first();
+		return $this->firstForLocale(
+			( clone $base )->forRegulation( null ),
+			$locale,
+		);
+	}
 
-		if ( $general instanceof PrivacyPolicy ) {
-			return $general;
+	/**
+	 * Returns the first matching policy for the given locale, falling back
+	 * to the same query without the locale filter so a partially-translated
+	 * deployment still serves _something_ instead of 404ing.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  \Illuminate\Database\Eloquent\Builder  $query   Pre-built query.
+	 * @param  string                                 $locale  Locale code.
+	 *
+	 * @return PrivacyPolicy|null
+	 */
+	protected function firstForLocale( $query, string $locale ): ?PrivacyPolicy
+	{
+		$localised = ( clone $query )->forLocale( $locale )->first();
+
+		if ( $localised instanceof PrivacyPolicy ) {
+			return $localised;
 		}
 
 		return $query->first();

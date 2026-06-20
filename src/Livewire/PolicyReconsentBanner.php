@@ -116,6 +116,13 @@ class PolicyReconsentBanner extends Component
 	/**
 	 * Records the current actor's re-consent.
 	 *
+	 * Compares the policy version captured at mount time against the
+	 * version that is currently active and refuses the grant if they
+	 * differ — that way the user can never accidentally accept a newer
+	 * policy that was republished after the banner was rendered but
+	 * before they clicked. When the versions diverge, the banner
+	 * resets so the visitor sees the new policy on the next render.
+	 *
 	 * @since 1.0.0
 	 *
 	 * @param  ReconsentService  $reconsent Injected service.
@@ -124,20 +131,30 @@ class PolicyReconsentBanner extends Component
 	 */
 	public function accept( ReconsentService $reconsent ): void
 	{
-		$policy = $this->resolvePolicy();
-		$user   = Auth::user();
+		$current = $reconsent->currentPolicy( $this->regulation );
+		$user    = Auth::user();
 
-		if ( null === $policy || null === $user ) {
+		if ( null === $current || null === $user ) {
 			$this->visible = false;
 			return;
 		}
 
-		$reconsent->grant( $policy, $user, request() );
+		if ( $this->policyVersion !== $current->version ) {
+			// Policy was republished between mount and click. Re-render so
+			// the user sees the new version and consents to that instead.
+			$this->policyVersion = $current->version;
+			$this->visible       = true;
 
-		$this->visible       = false;
-		$this->policyVersion = $policy->version;
+			$this->dispatch( 'privacy:reconsent-stale', version: $current->version );
 
-		$this->dispatch( 'privacy:reconsent-given', version: $policy->version );
+			return;
+		}
+
+		$reconsent->grant( $current, $user, request() );
+
+		$this->visible = false;
+
+		$this->dispatch( 'privacy:reconsent-given', version: $current->version );
 	}
 
 	/**

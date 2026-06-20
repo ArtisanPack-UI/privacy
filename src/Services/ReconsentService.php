@@ -59,20 +59,33 @@ class ReconsentService
 	 */
 	public function currentPolicy( ?string $regulation = null, ?string $locale = null ): ?PrivacyPolicy
 	{
-		$query = PrivacyPolicy::query()
-			->active()
-			->forRegulation( $regulation )
-			->latestFirst();
+		// Resolve the regulation in a way that honours both regulation-tagged
+		// and general (NULL) policies — callers that don't know the visitor's
+		// applicable regulation should still find the active GDPR/CCPA/LGPD/
+		// PIPEDA row instead of only matching `regulation IS NULL`.
+		$base = PrivacyPolicy::query()->active()->latestFirst();
 
-		if ( is_string( $locale ) && '' !== $locale ) {
-			$localised = ( clone $query )->forLocale( $locale )->first();
+		if ( is_string( $regulation ) && '' !== $regulation ) {
+			$specific = $this->firstForLocale(
+				( clone $base )->forRegulation( $regulation ),
+				$locale,
+			);
 
-			if ( $localised instanceof PrivacyPolicy ) {
-				return $localised;
+			if ( $specific instanceof PrivacyPolicy ) {
+				return $specific;
 			}
 		}
 
-		return $query->first();
+		$general = $this->firstForLocale(
+			( clone $base )->forRegulation( null ),
+			$locale,
+		);
+
+		if ( $general instanceof PrivacyPolicy ) {
+			return $general;
+		}
+
+		return $this->firstForLocale( $base, $locale );
 	}
 
 	/**
@@ -97,17 +110,32 @@ class ReconsentService
 		$subject = $user ?? Auth::user();
 
 		if ( ! $subject instanceof Model ) {
-			return $this->cookieVersionMatches( $policy );
+			// Guests have no stored policy_version; treat them as up-to-date
+			// here and let the cookie banner / first-touch flow capture the
+			// policy version when they make their initial choice.
+			return true;
 		}
 
-		$latest = Consent::query()
+		$consents = Consent::query()
 			->where( 'consentable_type', $subject->getMorphClass() )
-			->where( 'consentable_id', $subject->getKey() )
-			->orderByDesc( 'created_at' )
-			->first();
+			->where( 'consentable_id', $subject->getKey() );
+
+		if ( null !== $policy->regulation ) {
+			$consents->where( function ( $query ) use ( $policy ): void {
+				$query->where( 'regulation', $policy->regulation )
+					->orWhereNull( 'regulation' );
+			} );
+		}
+
+		$latest = $consents->orderByDesc( 'created_at' )->first();
 
 		if ( ! $latest instanceof Consent ) {
-			return false;
+			// A subject that has never consented is not "out of date" — they
+			// have never been asked. The cookie banner is responsible for
+			// capturing initial consent; we only fire re-consent for
+			// subjects who actually have a stored consent on an older
+			// policy version.
+			return true;
 		}
 
 		return $latest->policy_version === $policy->version;
@@ -174,13 +202,27 @@ class ReconsentService
 			return 0;
 		}
 
-		$updated = Consent::query()
+		// Scope the update to consents that actually belong to this policy's
+		// regulation (general policy = NULL regulation also matches NULL or
+		// any regulation row), and skip withdrawn rows so a re-consent
+		// doesn't accidentally re-stamp opted-out categories with the new
+		// policy version.
+		$consents = Consent::query()
 			->where( 'consentable_type', $subject->getMorphClass() )
 			->where( 'consentable_id', $subject->getKey() )
-			->update( [
-				'policy_version' => $policy->version,
-				'updated_at'     => Carbon::now(),
-			] );
+			->whereNull( 'withdrawn_at' );
+
+		if ( null !== $policy->regulation ) {
+			$consents->where( function ( $query ) use ( $policy ): void {
+				$query->where( 'regulation', $policy->regulation )
+					->orWhereNull( 'regulation' );
+			} );
+		}
+
+		$updated = $consents->update( [
+			'policy_version' => $policy->version,
+			'updated_at'     => Carbon::now(),
+		] );
 
 		Event::dispatch( new PolicyReconsentGiven( $policy, $subject, $request ) );
 
@@ -207,23 +249,26 @@ class ReconsentService
 	}
 
 	/**
-	 * Compares the cookie-stored policy version against the active one.
-	 * Used as the fallback for guests with no database identity.
+	 * Returns the first matching policy for the given locale, falling back
+	 * to the locale-agnostic query when no localised row exists.
 	 *
 	 * @since 1.0.0
 	 *
-	 * @param  PrivacyPolicy  $policy Active policy.
+	 * @param  \Illuminate\Database\Eloquent\Builder  $query  Pre-built query.
+	 * @param  string|null                            $locale Optional locale.
 	 *
-	 * @return bool
+	 * @return PrivacyPolicy|null
 	 */
-	protected function cookieVersionMatches( PrivacyPolicy $policy ): bool
+	protected function firstForLocale( $query, ?string $locale ): ?PrivacyPolicy
 	{
-		$cookie = $this->consents->getConsentCookie();
+		if ( is_string( $locale ) && '' !== $locale ) {
+			$localised = ( clone $query )->forLocale( $locale )->first();
 
-		if ( ! is_array( $cookie ) || ! isset( $cookie['_policy_version'] ) ) {
-			return false;
+			if ( $localised instanceof PrivacyPolicy ) {
+				return $localised;
+			}
 		}
 
-		return (string) $cookie['_policy_version'] === $policy->version;
+		return $query->first();
 	}
 }

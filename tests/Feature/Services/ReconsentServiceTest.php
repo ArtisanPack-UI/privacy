@@ -24,6 +24,69 @@ afterEach( function (): void {
 	Schema::dropIfExists( 'test_subjects' );
 } );
 
+it( 'resolves a regulation-tagged active policy even when the caller passes no regulation', function (): void {
+	PrivacyPolicy::factory()->active()->create( [
+		'regulation'         => 'gdpr',
+		'version'            => '1.0.0',
+		'requires_reconsent' => true,
+	] );
+
+	$service = app( ReconsentService::class );
+
+	expect( $service->currentPolicy()?->version )->toBe( '1.0.0' );
+	expect( $service->currentPolicy( 'gdpr' )?->version )->toBe( '1.0.0' );
+} );
+
+it( 'treats users with no consent rows as up-to-date so brand-new users don\'t see a reconsent prompt', function (): void {
+	PrivacyPolicy::factory()->active()->create( [
+		'requires_reconsent' => true,
+		'version'            => '1.0.0',
+	] );
+
+	$subject = TestSubject::create();
+
+	expect( app( ReconsentService::class )->isUpToDate( $subject ) )->toBeTrue();
+} );
+
+it( 'scopes grant() to the policy\'s regulation and skips withdrawn consents', function (): void {
+	$subject = TestSubject::create();
+
+	Consent::factory()->create( [
+		'consentable_type' => $subject->getMorphClass(),
+		'consentable_id'   => $subject->getKey(),
+		'regulation'       => 'gdpr',
+		'category'         => 'analytics',
+		'policy_version'   => '0.9.0',
+	] );
+	Consent::factory()->create( [
+		'consentable_type' => $subject->getMorphClass(),
+		'consentable_id'   => $subject->getKey(),
+		'regulation'       => 'ccpa',
+		'category'         => 'sale',
+		'policy_version'   => '0.5.0',
+	] );
+	Consent::factory()->create( [
+		'consentable_type' => $subject->getMorphClass(),
+		'consentable_id'   => $subject->getKey(),
+		'regulation'       => 'gdpr',
+		'category'         => 'marketing',
+		'policy_version'   => '0.9.0',
+		'withdrawn_at'     => now()->subDay(),
+	] );
+
+	$policy = PrivacyPolicy::factory()->active()->create( [
+		'regulation'         => 'gdpr',
+		'requires_reconsent' => true,
+		'version'            => '1.0.0',
+	] );
+
+	$updated = app( ReconsentService::class )->grant( $policy, $subject );
+
+	expect( $updated )->toBe( 1 );
+	expect( Consent::query()->where( 'regulation', 'ccpa' )->first()->policy_version )->toBe( '0.5.0' );
+	expect( Consent::query()->whereNotNull( 'withdrawn_at' )->first()->policy_version )->toBe( '0.9.0' );
+} );
+
 it( 'returns up-to-date when no active policy requires reconsent', function (): void {
 	$subject = TestSubject::create();
 	$service = app( ReconsentService::class );
