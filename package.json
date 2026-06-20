@@ -2,7 +2,7 @@
 	"name": "@artisanpack-ui/privacy",
 	"version": "1.0.0",
 	"description": "Client-side companion for artisanpack-ui/privacy — vanilla JS API plus React and Vue components for cookie consent management.",
-	"license": "GPL-3.0-or-later",
+	"license": "MIT",
 	"author": {
 		"name": "Jacob Martella",
 		"email": "me@jacobmartella.com"
