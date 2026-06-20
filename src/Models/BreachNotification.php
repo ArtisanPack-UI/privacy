@@ -144,8 +144,8 @@ class BreachNotification extends Model
 			'authority_notified_at' => 'datetime',
 			'users_notified_at'     => 'datetime',
 			'data_types_affected'   => 'array',
-			'affected_users'        => 'array',
-			'notifications_sent'    => 'array',
+			'affected_users'        => 'encrypted:array',
+			'notifications_sent'    => 'encrypted:array',
 			'records_affected'      => 'integer',
 		];
 	}

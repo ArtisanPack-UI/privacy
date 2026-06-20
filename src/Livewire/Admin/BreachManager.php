@@ -67,21 +67,16 @@ class BreachManager extends Component
 	public int $perPage = 25;
 
 	/**
-	 * Authorize the gate before mount.
+	 * Authorize the gate on every hydration so state updates from the
+	 * client cannot bypass the policy check after mount.
 	 *
 	 * @since 1.0.0
 	 *
 	 * @return void
 	 */
-	public function mount(): void
+	public function booted(): void
 	{
-		$gate = (string) config( 'artisanpack.privacy.admin.gate', 'manage-privacy' );
-
-		if ( '' === $gate ) {
-			$gate = 'manage-privacy';
-		}
-
-		Gate::authorize( $gate );
+		$this->authorizeAdmin();
 	}
 
 	/**
@@ -133,6 +128,25 @@ class BreachManager extends Component
 		return view( 'privacy::livewire.admin.breach-manager', [
 			'service' => app( BreachNotificationService::class ),
 		] );
+	}
+
+	/**
+	 * Resolves the configured admin gate name (defaulting to `manage-privacy`)
+	 * and runs `Gate::authorize` against it.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @return void
+	 */
+	protected function authorizeAdmin(): void
+	{
+		$gate = (string) config( 'artisanpack.privacy.admin.gate', 'manage-privacy' );
+
+		if ( '' === $gate ) {
+			$gate = 'manage-privacy';
+		}
+
+		Gate::authorize( $gate );
 	}
 
 	/**

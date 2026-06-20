@@ -32,6 +32,24 @@ return [
 
 	/*
 	|--------------------------------------------------------------------------
+	| Cache TTLs
+	|--------------------------------------------------------------------------
+	|
+	| TTL (in seconds) for in-memory caches that protect hot read paths from
+	| repeated DB hits. `consent_ttl` covers per-subject consent lookups,
+	| `policy_ttl` covers the active-policy resolver used by the reconsent
+	| middleware, and `banner_ttl` covers the per-subject expired-consent
+	| probe rendered on every page that mounts the cookie banner.
+	|
+	*/
+	'cache' => [
+		'consent_ttl' => (int) env( 'PRIVACY_CACHE_CONSENT_TTL', 300 ),
+		'policy_ttl'  => (int) env( 'PRIVACY_CACHE_POLICY_TTL', 600 ),
+		'banner_ttl'  => (int) env( 'PRIVACY_CACHE_BANNER_TTL', 60 ),
+	],
+
+	/*
+	|--------------------------------------------------------------------------
 	| Enabled Regulations
 	|--------------------------------------------------------------------------
 	|
@@ -203,7 +221,7 @@ return [
 		| high-volume subjects. Raise if your compliance posture requires
 		| a complete export regardless of size.
 		*/
-		'row_cap' => (int) env( 'PRIVACY_EXPORT_ROW_CAP', 10000 ),
+		'row_cap' => (int) env( 'PRIVACY_EXPORT_ROW_CAP', 50000 ),
 	],
 
 	/*
@@ -318,13 +336,14 @@ return [
 		],
 
 		/*
-		| ip-api.com base URL. Defaults to the free HTTP endpoint because
-		| the free tier does not support HTTPS. Operators on the Pro plan
-		| should swap this to the Pro HTTPS endpoint
-		| (`https://pro.ip-api.com`) so geolocation traffic is encrypted.
+		| ip-api.com base URL. Defaults to the Pro HTTPS endpoint so
+		| geolocation traffic is encrypted out of the box. Operators on the
+		| free tier (which does not support HTTPS) must opt-in explicitly
+		| by setting `PRIVACY_IP_API_BASE_URL=http://ip-api.com` — be aware
+		| that this leaks the visitor's IP to a third party in cleartext.
 		*/
 		'ip_api' => [
-			'base_url' => env( 'PRIVACY_IP_API_BASE_URL', 'http://ip-api.com' ),
+			'base_url' => env( 'PRIVACY_IP_API_BASE_URL', 'https://pro.ip-api.com' ),
 		],
 
 		/*

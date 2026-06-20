@@ -19,14 +19,9 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\Privacy\Console\Commands;
 
+use ArtisanPackUI\Privacy\Jobs\ProcessDataExportJob;
 use ArtisanPackUI\Privacy\Models\DataRequest;
-use ArtisanPackUI\Privacy\Models\DataRequestLog;
-use ArtisanPackUI\Privacy\Notifications\DataRequestCompleted;
-use ArtisanPackUI\Privacy\Services\DataExportService;
 use Illuminate\Console\Command;
-use Illuminate\Contracts\Notifications\Dispatcher as NotificationDispatcher;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -74,12 +69,9 @@ class ProcessDataRequests extends Command
 	 *
 	 * @since 1.0.0
 	 *
-	 * @param  DataExportService       $exporter      Export service used for export requests.
-	 * @param  NotificationDispatcher  $notifications Notification dispatcher for completion emails.
-	 *
 	 * @return int
 	 */
-	public function handle( DataExportService $exporter, NotificationDispatcher $notifications ): int
+	public function handle(): int
 	{
 		$dryRun = (bool) $this->option( 'dry-run' );
 		$type   = $this->resolveTypeFilter();
@@ -139,7 +131,7 @@ class ProcessDataRequests extends Command
 			}
 
 			try {
-				$this->processRequest( $request, $exporter, $notifications );
+				$this->dispatchRequest( $request );
 				$processed++;
 			} catch ( Throwable $e ) {
 				$failed++;
@@ -166,78 +158,27 @@ class ProcessDataRequests extends Command
 	}
 
 	/**
-	 * Processes a single data request — runs the export (if export type),
-	 * marks the request completed, writes an audit log, and notifies the
-	 * subject when notifiable.
+	 * Dispatches the heavy export-to-file work to the queue so very large
+	 * exports do not block the scheduler tick. Falls back to a synchronous
+	 * dispatch when the application is configured for the `sync` queue
+	 * driver, preserving the pre-queue behaviour for installs that haven't
+	 * wired up a worker yet.
 	 *
 	 * @since 1.0.0
 	 *
-	 * @param  DataRequest             $request       The request to process.
-	 * @param  DataExportService       $exporter      Export service for export requests.
-	 * @param  NotificationDispatcher  $notifications Dispatcher for the completion email.
+	 * @param  DataRequest  $request The request to dispatch.
 	 *
 	 * @return void
 	 */
-	protected function processRequest(
-		DataRequest $request,
-		DataExportService $exporter,
-		NotificationDispatcher $notifications,
-	): void {
-		$subject = $request->requestable;
-
-		// Refuse to silently complete a request whose subject is gone — the
-		// audit log would say "fulfilled" while no data was actually
-		// delivered. Reject it explicitly so an admin sees the dangling row.
-		if ( ! $subject instanceof Model ) {
-			$request->update( [
-				'status'      => DataRequest::STATUS_REJECTED,
-				'admin_notes' => __( 'Subject record could not be resolved (deleted or stale morph reference); request rejected without processing.' ),
-			] );
-
-			DataRequestLog::query()->create( [
-				'data_request_id' => $request->id,
-				'action'          => 'auto_rejected',
-				'description'     => sprintf( 'Auto-rejected %s request — subject record missing', $request->type ),
-				'metadata'        => [
-					'requestable_type' => $request->requestable_type,
-					'requestable_id'   => $request->requestable_id,
-				],
-			] );
+	protected function dispatchRequest( DataRequest $request ): void
+	{
+		if ( 'sync' === (string) config( 'queue.default' ) ) {
+			ProcessDataExportJob::dispatchSync( $request->id );
 
 			return;
 		}
 
-		$request->update( [ 'status' => DataRequest::STATUS_PROCESSING ] );
-
-		$downloadUrl = null;
-		$metadata    = [];
-
-		if ( DataRequest::TYPE_EXPORT === $request->type ) {
-			$format = (string) config( 'artisanpack.privacy.data_requests.export_format', 'json' );
-			$result = $exporter->exportToFile( $subject, $format );
-
-			$downloadUrl = $result['url'] ?? null;
-			$metadata    = [
-				'export_path' => $result['path'] ?? null,
-				'expires_at'  => $result['expires_at'] ?? null,
-			];
-		}
-
-		$request->update( [
-			'status'       => DataRequest::STATUS_COMPLETED,
-			'completed_at' => Carbon::now(),
-		] );
-
-		DataRequestLog::query()->create( [
-			'data_request_id' => $request->id,
-			'action'          => 'auto_processed',
-			'description'     => sprintf( 'Auto-processed %s request', $request->type ),
-			'metadata'        => $metadata,
-		] );
-
-		if ( method_exists( $subject, 'notify' ) ) {
-			$notifications->send( $subject, new DataRequestCompleted( $request, $downloadUrl ) );
-		}
+		ProcessDataExportJob::dispatch( $request->id );
 	}
 
 	/**

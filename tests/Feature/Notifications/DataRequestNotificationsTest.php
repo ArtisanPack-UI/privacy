@@ -26,13 +26,19 @@ function makeDataRequest(): DataRequest
 {
 	$subject = TestSubject::create();
 
-	return DataRequest::query()->create( [
-		'requestable_type'   => $subject->getMorphClass(),
-		'requestable_id'     => $subject->getKey(),
-		'type'               => DataRequest::TYPE_EXPORT,
-		'status'             => DataRequest::STATUS_PENDING,
-		'verification_token' => 'tok-notification',
+	$request = DataRequest::query()->create( [
+		'requestable_type' => $subject->getMorphClass(),
+		'requestable_id'   => $subject->getKey(),
+		'type'             => DataRequest::TYPE_EXPORT,
+		'status'           => DataRequest::STATUS_PENDING,
 	] );
+
+	$request->forceFill( [
+		'verification_token'      => 'tok-notification',
+		'verification_token_hash' => hash( 'sha256', 'tok-notification' ),
+	] )->save();
+
+	return $request;
 }
 
 it( 'resolves channels via config including per-notification overrides', function (): void {

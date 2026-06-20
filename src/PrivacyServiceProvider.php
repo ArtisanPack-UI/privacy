@@ -238,6 +238,26 @@ class PrivacyServiceProvider extends ServiceProvider
 		$this->registerViewComposers();
 		$this->registerConsoleCommands();
 		$this->registerScheduledTasks();
+		$this->registerPolicyCacheInvalidation();
+	}
+
+	/**
+	 * Wires model events on {@see Models\PrivacyPolicy}
+	 * so the reconsent service's policy cache is invalidated whenever a
+	 * policy is saved or deleted. Keeps the per-request memo cleared too.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @return void
+	 */
+	protected function registerPolicyCacheInvalidation(): void
+	{
+		$flush = static function (): void {
+			app( ReconsentService::class )->forgetPolicyCache();
+		};
+
+		Models\PrivacyPolicy::saved( $flush );
+		Models\PrivacyPolicy::deleted( $flush );
 	}
 
 	/**
@@ -370,6 +390,13 @@ class PrivacyServiceProvider extends ServiceProvider
 				(int) $adminMinutes,
 				(int) $adminHits,
 			)->by( null !== $key ? "user:{$key}" : ( $request->ip() ?: 'anon' ) );
+		} );
+
+		RateLimiter::for( 'privacy-consent', static function ( $request ) {
+			$key = $request->user()?->getAuthIdentifier();
+
+			return Limit::perMinute( 30 )
+				->by( null !== $key ? "user:{$key}" : ( $request->ip() ?: 'anon' ) );
 		} );
 	}
 

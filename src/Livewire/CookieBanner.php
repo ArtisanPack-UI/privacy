@@ -25,6 +25,7 @@ use ArtisanPackUI\Privacy\Services\ConsentService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Locked;
@@ -403,7 +404,10 @@ class CookieBanner extends Component
 			return false;
 		}
 
-		return Consent::query()
+		$key = 'privacy.consent.expired.' . sha1( $user->getMorphClass() . '|' . (string) $user->getKey() );
+		$ttl = (int) config( 'artisanpack.privacy.cache.banner_ttl', 60 );
+
+		return (bool) Cache::remember( $key, $ttl, static fn (): bool => Consent::query()
 			->forSubject( $user )
 			->whereNotNull( 'expires_at' )
 			->where( 'expires_at', '<', now() )
@@ -415,7 +419,7 @@ class CookieBanner extends Component
 					->whereColumn( 'newer.category', 'privacy_consents.category' )
 					->whereColumn( 'newer.created_at', '>', 'privacy_consents.created_at' );
 			} )
-			->exists();
+			->exists() );
 	}
 
 	/**

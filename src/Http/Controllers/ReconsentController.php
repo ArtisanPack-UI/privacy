@@ -103,8 +103,19 @@ class ReconsentController
 
 			$parsed = parse_url( $candidate );
 
-			// Relative URLs (no scheme + no host) are always safe to honour.
+			// Relative URLs (no scheme + no host) are normally safe — but
+			// reject "scheme-less" inputs that still smuggle a host or a
+			// scheme delimiter through quirks the parser tolerates:
+			//   - `\\evil.tld\path`        — UNC-style backslashes
+			//   - `//evil.tld/path`        — protocol-relative URL
+			//   - `javascript:alert(1)`    — scheme delimiter without host
 			if ( ! isset( $parsed['host'] ) && ! isset( $parsed['scheme'] ) ) {
+				if ( str_contains( $candidate, ':' )
+					|| str_starts_with( $candidate, '\\' )
+					|| str_starts_with( $candidate, '//' ) ) {
+					continue;
+				}
+
 				return $candidate;
 			}
 

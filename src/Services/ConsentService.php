@@ -26,6 +26,7 @@ use ArtisanPackUI\Privacy\Models\Consent;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Request;
@@ -59,11 +60,19 @@ class ConsentService
 		$subject = $user ?? $this->resolveSubject();
 
 		if ( $subject instanceof Model && $this->usesDatabase() ) {
-			return Consent::query()
-				->forSubject( $subject )
-				->forCategory( $category )
-				->active()
-				->exists();
+			$ttl = (int) config( 'artisanpack.privacy.cache.consent_ttl', 300 );
+
+			$map = Cache::remember(
+				$this->subjectCacheKey( $subject ),
+				$ttl,
+				static fn (): array => Consent::query()
+					->forSubject( $subject )
+					->active()
+					->pluck( 'category' )
+					->all(),
+			);
+
+			return in_array( $category, $map, true );
 		}
 
 		$cookie = $this->getConsentCookie();
@@ -163,6 +172,10 @@ class ConsentService
 			$this->setConsentCookie( $cookie );
 		}
 
+		if ( $subject instanceof Model ) {
+			$this->forgetSubjectCache( $subject );
+		}
+
 		Event::dispatch( new ConsentGiven( $consent ) );
 
 		return $consent;
@@ -213,6 +226,10 @@ class ConsentService
 			if ( $wasTrue || $wasNotRecorded ) {
 				$changed = $changed || $wasTrue;
 			}
+		}
+
+		if ( $subject instanceof Model ) {
+			$this->forgetSubjectCache( $subject );
 		}
 
 		return $changed;
@@ -315,6 +332,10 @@ class ConsentService
 			if ( false === $granted && $this->revokeConsent( $category, $user ) ) {
 				$written++;
 			}
+		}
+
+		if ( $written > 0 ) {
+			$this->forgetSubjectCache( $user );
 		}
 
 		return $written;
@@ -436,6 +457,51 @@ class ConsentService
 		// inline, so callers in console contexts (where no request signals
 		// are available) still get a sensible default.
 		return app( \ArtisanPackUI\Privacy\Regulations\RegulationRegistry::class )->currentKey();
+	}
+
+	/**
+	 * Returns the cache key used to memoise the subject's active category map.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  Model  $subject Subject whose key should be derived.
+	 *
+	 * @return string
+	 */
+	protected function subjectCacheKey( Model $subject ): string
+	{
+		return 'privacy.consent.' . sha1( $subject->getMorphClass() . '|' . (string) $subject->getKey() );
+	}
+
+	/**
+	 * Returns the cache key used to memoise the subject's expired-consent
+	 * probe rendered by the cookie banner.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  Model  $subject Subject whose key should be derived.
+	 *
+	 * @return string
+	 */
+	protected function expiredCacheKey( Model $subject ): string
+	{
+		return 'privacy.consent.expired.' . sha1( $subject->getMorphClass() . '|' . (string) $subject->getKey() );
+	}
+
+	/**
+	 * Invalidates the cached active-category map AND the expired-consent
+	 * banner probe for the given subject.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  Model  $subject Subject whose cache should be invalidated.
+	 *
+	 * @return void
+	 */
+	protected function forgetSubjectCache( Model $subject ): void
+	{
+		Cache::forget( $this->subjectCacheKey( $subject ) );
+		Cache::forget( $this->expiredCacheKey( $subject ) );
 	}
 
 	/**

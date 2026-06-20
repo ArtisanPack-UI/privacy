@@ -25,12 +25,16 @@ function makeRequest( string $token = 'tok-12345', ?Illuminate\Support\Carbon $c
 	$subject = TestSubject::create( [ 'email' => 'jacob@example.com' ] );
 
 	$request = DataRequest::query()->create( [
-		'requestable_type'   => $subject->getMorphClass(),
-		'requestable_id'     => $subject->getKey(),
-		'type'               => DataRequest::TYPE_ACCESS,
-		'status'             => DataRequest::STATUS_PENDING,
-		'verification_token' => $token,
+		'requestable_type' => $subject->getMorphClass(),
+		'requestable_id'   => $subject->getKey(),
+		'type'             => DataRequest::TYPE_ACCESS,
+		'status'           => DataRequest::STATUS_PENDING,
 	] );
+
+	$request->forceFill( [
+		'verification_token'      => $token,
+		'verification_token_hash' => hash( 'sha256', $token ),
+	] )->save();
 
 	if ( null !== $createdAt ) {
 		$request->forceFill( [ 'created_at' => $createdAt ] )->save();

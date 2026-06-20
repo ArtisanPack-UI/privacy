@@ -25,6 +25,8 @@ use ArtisanPackUI\Privacy\Services\DataRequestService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Request as RequestFacade;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
 use Throwable;
@@ -118,6 +120,21 @@ class DataRequestForm extends Component
 
 			return;
 		}
+
+		// Cap submissions at 5/min keyed by user id when authenticated,
+		// IP otherwise — prevents the form from being a deletion-spam vector
+		// or admin notification firehose.
+		$throttleKey = 'privacy-data-request-form:' . ( null !== $subject->getAuthIdentifier()
+			? 'user:' . (string) $subject->getAuthIdentifier()
+			: 'ip:' . (string) ( RequestFacade::ip() ?: 'anon' ) );
+
+		if ( RateLimiter::tooManyAttempts( $throttleKey, 5 ) ) {
+			$this->addError( 'type', __( 'Too many requests. Please wait a minute and try again.' ) );
+
+			return;
+		}
+
+		RateLimiter::hit( $throttleKey, 60 );
 
 		$this->validate( $this->rules(), $this->messages() );
 

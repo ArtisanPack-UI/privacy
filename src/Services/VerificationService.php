@@ -49,7 +49,33 @@ class VerificationService
 			return null;
 		}
 
-		return DataRequest::query()->where( 'verification_token', $token )->first();
+		$hash = hash( 'sha256', $token );
+
+		$match = DataRequest::query()->where( 'verification_token_hash', $hash )->first();
+
+		if ( $match instanceof DataRequest ) {
+			// Constant-time guard against any future malicious row whose
+			// `verification_token_hash` could be guessed via a successful
+			// lookup; the hash lookup above and this comparison both run
+			// regardless of outcome.
+			if ( is_string( $match->verification_token_hash )
+				&& hash_equals( $match->verification_token_hash, $hash ) ) {
+				return $match;
+			}
+
+			return null;
+		}
+
+		// Backfill grace: rows created before the 1.0 security patch never
+		// got a `verification_token_hash`, so fall back to the legacy
+		// plaintext column when the hashed lookup misses AND the row has no
+		// hash recorded. Drops in 1.1 once all live rows have a hash.
+		$legacy = DataRequest::query()
+			->where( 'verification_token', $token )
+			->whereNull( 'verification_token_hash' )
+			->first();
+
+		return $legacy instanceof DataRequest ? $legacy : null;
 	}
 
 	/**
@@ -150,10 +176,11 @@ class VerificationService
 	{
 		$token = Str::random( 40 );
 
-		$request->update( [
-			'verification_token' => $token,
-			'verified_at'        => null,
-		] );
+		$request->forceFill( [
+			'verification_token'      => $token,
+			'verification_token_hash' => hash( 'sha256', $token ),
+			'verified_at'             => null,
+		] )->save();
 
 		return $token;
 	}
