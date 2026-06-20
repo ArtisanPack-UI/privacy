@@ -193,9 +193,18 @@ trait HasPersonalData
 	{
 		$service = app( AnonymizationService::class );
 		$map     = $this->buildAnonymizationMap();
+		$names   = $this->personalDataFieldNames();
 
+		// When the trait declares fields without per-field strategies, pass
+		// the declared names as a numeric list. The service resolves a
+		// strategy for each one from `discovery.field_patterns` — this is
+		// strictly broader than falling through to pattern discovery, which
+		// would silently skip declared columns whose names do not match any
+		// configured pattern.
 		if ( [] === $map ) {
-			return $service->anonymize( $this );
+			return [] === $names
+				? $service->anonymize( $this )
+				: $service->anonymize( $this, $names );
 		}
 
 		return $service->anonymize( $this, $map );
@@ -220,11 +229,16 @@ trait HasPersonalData
 	{
 		$service = app( DataDeletionService::class );
 
-		if ( ! array_key_exists( 'strategy', $options ) ) {
-			$strategy = $this->resolvePreferredDeletionStrategy();
+		$supplied        = $options['strategy'] ?? null;
+		$strategyMissing = ! is_string( $supplied ) || '' === $supplied;
 
-			if ( null !== $strategy ) {
-				$options['strategy'] = $strategy;
+		if ( $strategyMissing ) {
+			$resolved = $this->resolvePreferredDeletionStrategy();
+
+			if ( null !== $resolved ) {
+				$options['strategy'] = $resolved;
+			} else {
+				unset( $options['strategy'] );
 			}
 		}
 

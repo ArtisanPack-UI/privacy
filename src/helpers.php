@@ -84,10 +84,14 @@ if ( ! function_exists( 'privacyRegulations' ) ) {
 	}
 }
 
-if ( ! function_exists( 'getApplicableRegulation' ) ) {
+if ( ! function_exists( 'privacyApplicableRegulation' ) ) {
 	/**
 	 * Returns the highest-priority {@see PrivacyRegulation} that applies to
 	 * the supplied (or current) request, or null when none apply.
+	 *
+	 * Sibling helpers in this file all use the `privacy*` prefix to avoid
+	 * polluting the global namespace — keep this one consistent so editor
+	 * autocompletion groups them together.
 	 *
 	 * @since 1.0.0
 	 *
@@ -95,7 +99,7 @@ if ( ! function_exists( 'getApplicableRegulation' ) ) {
 	 *
 	 * @return PrivacyRegulation|null
 	 */
-	function getApplicableRegulation( ?Request $request = null ): ?PrivacyRegulation
+	function privacyApplicableRegulation( ?Request $request = null ): ?PrivacyRegulation
 	{
 		return app( RegulationRegistry::class )->applicableFor( $request );
 	}

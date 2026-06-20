@@ -130,3 +130,33 @@ it( 'returns the authenticated subject history with download URLs for completed 
 
 	expect( $pendingPayload['download_url'] )->toBeNull();
 } );
+
+it( 'isolates subjects so user A cannot see user Bs request history', function (): void {
+	$alice = TestSubject::create();
+	$bob   = TestSubject::create();
+
+	DataRequest::query()->create( [
+		'requestable_type' => $alice->getMorphClass(),
+		'requestable_id'   => $alice->getKey(),
+		'type'             => DataRequest::TYPE_EXPORT,
+		'status'           => DataRequest::STATUS_COMPLETED,
+		'data'             => [ 'download_url' => 'https://example.test/alice-export.json' ],
+	] );
+
+	$bobsRequest = DataRequest::query()->create( [
+		'requestable_type' => $bob->getMorphClass(),
+		'requestable_id'   => $bob->getKey(),
+		'type'             => DataRequest::TYPE_ACCESS,
+		'status'           => DataRequest::STATUS_PENDING,
+	] );
+
+	$this->actingAs( $alice );
+	$response = $this->getJson( '/api/privacy/data-requests' );
+
+	$response->assertOk();
+
+	$ids = array_column( $response->json( 'requests' ), 'id' );
+
+	expect( $ids )->not->toContain( $bobsRequest->id );
+	expect( count( $ids ) )->toBe( 1 );
+} );

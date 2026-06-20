@@ -12,7 +12,7 @@
 import { computed, onMounted, ref } from 'vue';
 import ConsentPreferences from './ConsentPreferences.vue';
 import DataRequestForm, { type DataRequestResult } from './DataRequestForm.vue';
-import { useConsent } from './useConsent';
+import { useConsent, type UseConsentOptions } from './useConsent';
 
 export interface PrivacyDashboardRequest {
 	id: number;
@@ -30,7 +30,7 @@ export interface PrivacyDashboardHistoryPayload {
 	requests: PrivacyDashboardRequest[];
 }
 
-interface PrivacyDashboardProps {
+interface PrivacyDashboardProps extends UseConsentOptions {
 	className?: string;
 	policyUrl?: string;
 	historyEndpoint?: string;
@@ -53,7 +53,15 @@ const props = withDefaults( defineProps<PrivacyDashboardProps>(), {
 	showHistory: true,
 } );
 
-const consent = useConsent();
+const consentOptions = computed<UseConsentOptions>( () => ( {
+	baseUrl: props.baseUrl,
+	csrfToken: props.csrfToken,
+	fetch: props.fetch,
+	client: props.client,
+	skipInitialLoad: props.skipInitialLoad,
+} ) );
+
+const consent = useConsent( consentOptions.value );
 const history = ref<PrivacyDashboardHistoryPayload | null>( null );
 const loadingHistory = ref( false );
 const historyError = ref<string | null>( null );

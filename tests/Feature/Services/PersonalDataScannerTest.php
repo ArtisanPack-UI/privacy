@@ -123,3 +123,34 @@ it( 'classifies SSN-style columns as sensitive', function (): void {
 
 	expect( $fields['ssn']['sensitivity'] )->toBe( PersonalDataMap::SENSITIVITY_SENSITIVE );
 } );
+
+it( 'does not classify columns that merely contain a pattern as personal data', function (): void {
+	Schema::create( 'scan_false_positives', function ( Blueprint $table ): void {
+		$table->id();
+		$table->string( 'username' )->nullable();
+		$table->string( 'tenant_id' )->nullable();
+		$table->string( 'filename' )->nullable();
+		$table->string( 'microphone_id' )->nullable();
+	} );
+
+	if ( ! class_exists( ScannerFalsePositiveSubject::class ) ) {
+		eval( <<<'PHP'
+			class ScannerFalsePositiveSubject extends \Illuminate\Database\Eloquent\Model
+			{
+				public $timestamps = false;
+				protected $table = 'scan_false_positives';
+				protected $guarded = [];
+			}
+		PHP );
+	}
+
+	$scanner = new PersonalDataScanner();
+	$fields  = $scanner->scanModel( ScannerFalsePositiveSubject::class );
+
+	expect( $fields )->not->toHaveKey( 'username' );
+	expect( $fields )->not->toHaveKey( 'tenant_id' );
+	expect( $fields )->not->toHaveKey( 'filename' );
+	expect( $fields )->not->toHaveKey( 'microphone_id' );
+
+	Schema::dropIfExists( 'scan_false_positives' );
+} );

@@ -78,6 +78,16 @@ class PrivacyDashboard extends Component
 	public ?string $policyUrl = null;
 
 	/**
+	 * Optional override for the dashboard heading. Mirrors the `heading`
+	 * prop / slot on the React and Vue versions so host applications can
+	 * brand the surface consistently across all three.
+	 *
+	 * @var string|null
+	 */
+	#[Locked]
+	public ?string $heading = null;
+
+	/**
 	 * Maximum number of historical requests to show inline.
 	 *
 	 * @var int
@@ -102,6 +112,7 @@ class PrivacyDashboard extends Component
 	 * @param  bool|null     $showHistory     Override the history section visibility.
 	 * @param  string|null   $policyUrl       URL to the privacy policy.
 	 * @param  int|null      $historyLimit    Max historical requests to show.
+	 * @param  string|null   $heading         Override the default heading text.
 	 *
 	 * @return void
 	 */
@@ -111,6 +122,7 @@ class PrivacyDashboard extends Component
 		?bool $showHistory = null,
 		?string $policyUrl = null,
 		?int $historyLimit = null,
+		?string $heading = null,
 	): void {
 		if ( null !== $showConsent ) {
 			$this->showConsent = $showConsent;
@@ -125,6 +137,7 @@ class PrivacyDashboard extends Component
 		}
 
 		$this->policyUrl = $policyUrl;
+		$this->heading   = $heading;
 
 		if ( null !== $historyLimit && $historyLimit > 0 ) {
 			$this->historyLimit = $historyLimit;
@@ -218,6 +231,51 @@ class PrivacyDashboard extends Component
 		$regulation = $resolver->applicableFor();
 
 		return $regulation?->key();
+	}
+
+	/**
+	 * Returns the translated, capitalised label for a request type. The
+	 * static `__()` calls let translation extractors index the strings —
+	 * `__( ucfirst( $type ) )` cannot be extracted because the value is
+	 * resolved at runtime.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  string  $type Request type value from {@see DataRequest}.
+	 *
+	 * @return string
+	 */
+	public function typeLabel( string $type ): string
+	{
+		$labels = [
+			DataRequest::TYPE_ACCESS        => __( 'Access' ),
+			DataRequest::TYPE_EXPORT        => __( 'Export' ),
+			DataRequest::TYPE_DELETION      => __( 'Deletion' ),
+			DataRequest::TYPE_RECTIFICATION => __( 'Rectification' ),
+		];
+
+		return $labels[ $type ] ?? ucfirst( $type );
+	}
+
+	/**
+	 * Returns the translated, capitalised label for a request status.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  string  $status Status value from {@see DataRequest}.
+	 *
+	 * @return string
+	 */
+	public function statusLabel( string $status ): string
+	{
+		$labels = [
+			DataRequest::STATUS_PENDING    => __( 'Pending' ),
+			DataRequest::STATUS_PROCESSING => __( 'Processing' ),
+			DataRequest::STATUS_COMPLETED  => __( 'Completed' ),
+			DataRequest::STATUS_REJECTED   => __( 'Rejected' ),
+		];
+
+		return $labels[ $status ] ?? ucfirst( $status );
 	}
 
 	/**

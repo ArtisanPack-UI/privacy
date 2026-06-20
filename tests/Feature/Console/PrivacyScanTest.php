@@ -59,3 +59,15 @@ it( 'rejects unknown formats', function (): void {
 		->expectsOutputToContain( 'Unsupported format' )
 		->assertExitCode( 2 );
 } );
+
+it( 'rejects non-existent model classes with a clear error', function (): void {
+	$this->artisan( 'privacy:scan', [ '--model' => 'App\\NotAModel' ] )
+		->expectsOutputToContain( 'could not be resolved' )
+		->assertExitCode( 2 );
+} );
+
+it( 'rejects classes that are not Eloquent models', function (): void {
+	$this->artisan( 'privacy:scan', [ '--model' => stdClass::class ] )
+		->expectsOutputToContain( 'could not be resolved' )
+		->assertExitCode( 2 );
+} );

@@ -6,7 +6,7 @@
 	@endphp
 
 	<header class="space-y-2">
-		<h2 class="text-2xl font-semibold">{{ __( 'Your privacy dashboard' ) }}</h2>
+		<h2 class="text-2xl font-semibold">{{ $heading ?? __( 'Your privacy dashboard' ) }}</h2>
 		<p class="opacity-70">{{ __( 'Review your consent settings, file data requests, and download completed exports.' ) }}</p>
 
 		@if($regulation)
@@ -70,9 +70,9 @@
 							<tbody>
 								@foreach($requests as $request)
 									<tr wire:key="privacy-dashboard-request-{{ $request->id }}">
-										<td>{{ __( ucfirst( $request->type ) ) }}</td>
+										<td>{{ $this->typeLabel( $request->type ) }}</td>
 										<td>
-											<span class="badge badge-ghost">{{ __( ucfirst( $request->status ) ) }}</span>
+											<span class="badge badge-ghost">{{ $this->statusLabel( $request->status ) }}</span>
 										</td>
 										<td>{{ optional( $request->created_at )->toFormattedDateString() }}</td>
 										<td>

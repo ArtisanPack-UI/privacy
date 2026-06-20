@@ -168,10 +168,13 @@ class PersonalDataScanner
 	{
 		$discovered = $this->scan();
 		$inventory  = [];
+		$seen       = [];
 
 		foreach ( $discovered as $modelClass => $fields ) {
 			foreach ( $fields as $field => $config ) {
-				$inventory[] = array_merge(
+				$key          = $modelClass . '::' . $field;
+				$seen[ $key ] = true;
+				$inventory[]  = array_merge(
 					[
 						'model' => $modelClass,
 						'field' => $field,
@@ -184,10 +187,8 @@ class PersonalDataScanner
 		foreach ( PersonalDataMap::query()->get() as $row ) {
 			$key = $row->model . '::' . $row->field;
 
-			foreach ( $inventory as $entry ) {
-				if ( $entry['model'] . '::' . $entry['field'] === $key ) {
-					continue 2;
-				}
+			if ( isset( $seen[ $key ] ) ) {
+				continue;
 			}
 
 			$inventory[] = [
@@ -500,7 +501,8 @@ class PersonalDataScanner
 	 */
 	protected function guessTypeFromName( string $field ): ?string
 	{
-		$lower = Str::lower( $field );
+		$lower  = Str::lower( $field );
+		$tokens = $this->tokenize( $lower );
 
 		foreach ( $this->fieldPatterns() as $type => $patterns ) {
 			foreach ( (array) $patterns as $pattern ) {
@@ -510,17 +512,87 @@ class PersonalDataScanner
 			}
 		}
 
+		// Token-level match avoids the unanchored-substring trap where
+		// `username` collides with the `name` pattern or `tenant_id` collides
+		// with the `id` pattern. Compare against the column's underscore /
+		// dash / camelCase tokens instead of a raw string contains.
 		foreach ( $this->fieldPatterns() as $type => $patterns ) {
 			foreach ( (array) $patterns as $pattern ) {
 				$needle = Str::lower( (string) $pattern );
 
-				if ( '' !== $needle && Str::contains( $lower, $needle ) ) {
+				if ( '' === $needle ) {
+					continue;
+				}
+
+				$patternTokens = $this->tokenize( $needle );
+
+				if ( $this->tokensContainSequence( $tokens, $patternTokens ) ) {
 					return (string) $type;
 				}
 			}
 		}
 
 		return null;
+	}
+
+	/**
+	 * Splits a column name into lowercase tokens on underscores, dashes, and
+	 * camelCase boundaries.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  string  $value Identifier to split.
+	 *
+	 * @return array<int, string>
+	 */
+	protected function tokenize( string $value ): array
+	{
+		$withSpaces = (string) preg_replace( '/([a-z0-9])([A-Z])/', '$1 $2', $value );
+		$normalized = strtolower( str_replace( [ '_', '-' ], ' ', $withSpaces ) );
+
+		return array_values( array_filter(
+			preg_split( '/\s+/', $normalized ) ?: [],
+			static fn ( string $token ): bool => '' !== $token,
+		) );
+	}
+
+	/**
+	 * Returns true when `$needle` appears as a contiguous sequence inside
+	 * `$haystack`. Both arrays are pre-tokenized.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  array<int, string>  $haystack Tokens to search.
+	 * @param  array<int, string>  $needle   Tokens to find.
+	 *
+	 * @return bool
+	 */
+	protected function tokensContainSequence( array $haystack, array $needle ): bool
+	{
+		$needleLength = count( $needle );
+
+		if ( 0 === $needleLength ) {
+			return false;
+		}
+
+		$haystackLength = count( $haystack );
+
+		for ( $i = 0; $i <= $haystackLength - $needleLength; ++$i ) {
+			$match = true;
+
+			for ( $j = 0; $j < $needleLength; ++$j ) {
+				if ( $haystack[ $i + $j ] !== $needle[ $j ] ) {
+					$match = false;
+					break;
+				}
+			}
+
+			if ( $match ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**

@@ -107,12 +107,23 @@ abstract class BaseRegulation implements PrivacyRegulation
 
 	/**
 	 * @inheritDoc
+	 *
+	 * Configuration may be stored either as a scalar (a single deadline that
+	 * applies to every request type) or as a per-type array — both shapes
+	 * are accepted so applications can model regulations that differentiate
+	 * access vs. deletion timeframes without breaking the scalar default.
 	 */
 	public function getResponseDays( string $requestType ): int
 	{
 		$configured = config( "artisanpack.privacy.data_requests.response_days.{$this->key}" );
 
-		if ( null !== $configured ) {
+		if ( is_array( $configured ) ) {
+			$candidate = $configured[ $requestType ] ?? $configured['default'] ?? null;
+
+			if ( null !== $candidate ) {
+				return (int) $candidate;
+			}
+		} elseif ( null !== $configured ) {
 			return (int) $configured;
 		}
 

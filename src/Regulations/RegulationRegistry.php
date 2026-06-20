@@ -93,6 +93,20 @@ class RegulationRegistry
 	 */
 	public function get( string $key ): ?PrivacyRegulation
 	{
+		$regulations = (array) config( 'artisanpack.privacy.regulations', [] );
+
+		// Mirror `all()`'s enabled filter so callers cannot end up holding a
+		// disabled regulation through `get()` — every other resolution path
+		// (helpers, `applicableFor()`, the dashboard) treats disabled
+		// regulations as absent, and divergence here causes silent drift.
+		if ( ! array_key_exists( $key, $regulations ) ) {
+			return null;
+		}
+
+		if ( true !== ( $regulations[ $key ]['enabled'] ?? false ) ) {
+			return null;
+		}
+
 		if ( isset( $this->instances[ $key ] ) ) {
 			return $this->instances[ $key ];
 		}
@@ -103,12 +117,6 @@ class RegulationRegistry
 			if ( $instance instanceof PrivacyRegulation ) {
 				return $this->instances[ $key ] = $instance;
 			}
-		}
-
-		$regulations = (array) config( 'artisanpack.privacy.regulations', [] );
-
-		if ( ! array_key_exists( $key, $regulations ) ) {
-			return null;
 		}
 
 		return $this->instances[ $key ] = new GenericRegulation( $key );
@@ -127,10 +135,6 @@ class RegulationRegistry
 		$regulations = (array) config( 'artisanpack.privacy.regulations', [] );
 
 		foreach ( array_keys( $regulations ) as $key ) {
-			if ( true !== ( $regulations[ $key ]['enabled'] ?? false ) ) {
-				continue;
-			}
-
 			$instance = $this->get( (string) $key );
 
 			if ( $instance instanceof PrivacyRegulation ) {
@@ -189,6 +193,36 @@ class RegulationRegistry
 		$matches = $this->applicable( $request );
 
 		return $matches[0] ?? null;
+	}
+
+	/**
+	 * Returns the regulation key the package should record on persisted
+	 * artifacts (consents, data-requests) for the current request.
+	 *
+	 * Resolves through {@see applicableFor()} first so explicit region
+	 * signals win; falls back to the first enabled regulation in config
+	 * order so callers running outside an HTTP request (queues, CLI) still
+	 * get a sensible default instead of null.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  Request|null  $request  Request to evaluate, when one is available.
+	 *
+	 * @return string|null
+	 */
+	public function currentKey( ?Request $request = null ): ?string
+	{
+		$matched = $this->applicableFor( $request );
+
+		if ( null !== $matched ) {
+			return $matched->key();
+		}
+
+		foreach ( $this->all() as $key => $_ ) {
+			return $key;
+		}
+
+		return null;
 	}
 
 	/**

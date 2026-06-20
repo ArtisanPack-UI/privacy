@@ -132,3 +132,35 @@ it( 'falls back to the anonymization service defaults when no metadata is declar
 	// should still work using config defaults from the service.
 	expect( $model->anonymizePersonalData() )->toBeTrue();
 } );
+
+it( 'anonymizes declared fields that do not match any discovery pattern', function (): void {
+	Schema::table( 'has_pd_subjects', function ( Blueprint $table ): void {
+		$table->string( 'arbitrary_handle' )->nullable();
+	} );
+
+	if ( ! class_exists( HasPersonalDataNonPatternModel::class ) ) {
+		eval( <<<'PHP'
+			class HasPersonalDataNonPatternModel extends \Illuminate\Database\Eloquent\Model
+			{
+				use \ArtisanPackUI\Privacy\Concerns\HasPersonalData;
+
+				public $timestamps = false;
+				protected $table = 'has_pd_subjects';
+				protected $guarded = [];
+
+				protected $personalDataFields = [ 'arbitrary_handle' ];
+			}
+		PHP );
+	}
+
+	$model = HasPersonalDataNonPatternModel::create( [
+		'arbitrary_handle' => 'original-handle-value',
+	] );
+
+	expect( $model->anonymizePersonalData() )->toBeTrue();
+
+	$model->refresh();
+
+	expect( $model->arbitrary_handle )->not->toBe( 'original-handle-value' );
+	expect( $model->arbitrary_handle )->not->toBeNull();
+} );

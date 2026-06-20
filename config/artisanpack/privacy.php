@@ -150,6 +150,15 @@ return [
 		'export_format' => env( 'PRIVACY_EXPORT_FORMAT', 'json' ),
 		'notify_admin'  => true,
 		'admin_email'   => env( 'PRIVACY_ADMIN_EMAIL' ),
+
+		/*
+		| Per-user rate limit applied to the JSON `/data-requests` endpoints
+		| (both index and store) as `hits,minutes`. Keyed by authenticated
+		| user when present, otherwise by IP. Tune down for tighter
+		| enumeration protection; tune up for high-traffic dashboard
+		| polling.
+		*/
+		'api_rate_limit' => env( 'PRIVACY_DATA_REQUESTS_API_RATE_LIMIT', '60,1' ),
 	],
 
 	/*

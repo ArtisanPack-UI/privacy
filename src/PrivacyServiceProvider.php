@@ -227,6 +227,18 @@ class PrivacyServiceProvider extends ServiceProvider
 				(int) $hits,
 			)->by( $request->ip() ?: 'anon' );
 		} );
+
+		$apiRule                  = (string) config( 'artisanpack.privacy.data_requests.api_rate_limit', '60,1' );
+		[ $apiHits, $apiMinutes ] = array_pad( explode( ',', $apiRule ), 2, '1' );
+
+		RateLimiter::for( 'privacy-data-requests-api', static function ( $request ) use ( $apiHits, $apiMinutes ) {
+			$key = $request->user()?->getAuthIdentifier();
+
+			return Limit::perMinutes(
+				(int) $apiMinutes,
+				(int) $apiHits,
+			)->by( null !== $key ? "user:{$key}" : ( $request->ip() ?: 'anon' ) );
+		} );
 	}
 
 	/**

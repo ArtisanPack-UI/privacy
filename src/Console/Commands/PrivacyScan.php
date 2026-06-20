@@ -22,6 +22,8 @@ namespace ArtisanPackUI\Privacy\Console\Commands;
 use ArtisanPackUI\Privacy\Models\PersonalDataMap;
 use ArtisanPackUI\Privacy\Services\PersonalDataScanner;
 use Illuminate\Console\Command;
+use Illuminate\Database\Eloquent\Model;
+use RuntimeException;
 
 /**
  * Scans the configured models for personal-data fields.
@@ -66,6 +68,18 @@ class PrivacyScan extends Command
 			return self::INVALID;
 		}
 
+		$model = $this->option( 'model' );
+
+		if ( null !== $model ) {
+			$class = (string) $model;
+
+			if ( ! class_exists( $class ) || ! is_subclass_of( $class, Model::class ) ) {
+				$this->error( "Model class {$class} could not be resolved as an Eloquent model." );
+
+				return self::INVALID;
+			}
+		}
+
 		$results = $this->collect( $scanner );
 
 		if ( [] === $results ) {
@@ -103,9 +117,17 @@ class PrivacyScan extends Command
 		$model = $this->option( 'model' );
 
 		if ( null !== $model ) {
-			$fields = $scanner->scanModel( (string) $model );
+			$class = (string) $model;
 
-			return [] === $fields ? [] : [ (string) $model => $fields ];
+			if ( ! class_exists( $class ) || ! is_subclass_of( $class, Model::class ) ) {
+				$this->error( "Model class {$class} could not be resolved as an Eloquent model." );
+
+				return [];
+			}
+
+			$fields = $scanner->scanModel( $class );
+
+			return [] === $fields ? [] : [ $class => $fields ];
 		}
 
 		return $scanner->scan();
@@ -185,6 +207,10 @@ class PrivacyScan extends Command
 	protected function renderCsv( array $results ): void
 	{
 		$handle = fopen( 'php://temp', 'r+' );
+
+		if ( false === $handle ) {
+			throw new RuntimeException( 'Failed to open the CSV buffer.' );
+		}
 
 		fputcsv(
 			$handle,
