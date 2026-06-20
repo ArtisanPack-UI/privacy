@@ -15,6 +15,8 @@
 
 declare( strict_types=1 );
 
+use ArtisanPackUI\Privacy\Http\Controllers\Api\Admin\ConsentAdminApiController;
+use ArtisanPackUI\Privacy\Http\Controllers\Api\Admin\DataRequestAdminApiController;
 use ArtisanPackUI\Privacy\Http\Controllers\Api\CategoriesApiController;
 use ArtisanPackUI\Privacy\Http\Controllers\Api\ConsentApiController;
 use ArtisanPackUI\Privacy\Http\Controllers\Api\DataRequestApiController;
@@ -29,3 +31,17 @@ Route::get( '/data-requests', [ DataRequestApiController::class, 'index' ] )
 Route::post( '/data-requests', [ DataRequestApiController::class, 'store' ] )
 	->middleware( 'throttle:privacy-data-requests-api' )
 	->name( 'privacy.api.data-requests.store' );
+
+Route::prefix( 'admin' )->group( function (): void {
+	Route::get( '/consents', [ ConsentAdminApiController::class, 'index' ] )
+		->name( 'privacy.api.admin.consents.index' );
+
+	Route::get( '/data-requests', [ DataRequestAdminApiController::class, 'index' ] )
+		->name( 'privacy.api.admin.data-requests.index' );
+	Route::get( '/data-requests/{id}', [ DataRequestAdminApiController::class, 'show' ] )
+		->whereNumber( 'id' )
+		->name( 'privacy.api.admin.data-requests.show' );
+	Route::post( '/data-requests/{id}/actions', [ DataRequestAdminApiController::class, 'processAction' ] )
+		->whereNumber( 'id' )
+		->name( 'privacy.api.admin.data-requests.actions' );
+} );

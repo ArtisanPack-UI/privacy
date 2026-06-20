@@ -15,6 +15,17 @@ export type {
 } from './PrivacyDashboard.vue';
 export { useConsent } from './useConsent';
 export type { UseConsentOptions, UseConsentResult } from './useConsent';
+export {
+	ConsentManager as AdminConsentManager,
+	DataRequestManager as AdminDataRequestManager,
+} from './Admin';
+export type {
+	AdminConsentPayload,
+	AdminConsentRow,
+	AdminDataRequestDetails,
+	AdminDataRequestPayload,
+	AdminDataRequestRow,
+} from './Admin';
 export type {
 	ConsentMap,
 	ConsentState,

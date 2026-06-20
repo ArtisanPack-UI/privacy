@@ -20,6 +20,19 @@ export type {
 } from './PrivacyDashboard';
 export { useConsent } from './useConsent';
 export type { UseConsentOptions, UseConsentResult } from './useConsent';
+export {
+	ConsentManager as AdminConsentManager,
+	DataRequestManager as AdminDataRequestManager,
+} from './Admin';
+export type {
+	AdminConsentPayload,
+	AdminConsentRow,
+	AdminDataRequestDetails,
+	AdminDataRequestPayload,
+	AdminDataRequestRow,
+	ConsentManagerProps as AdminConsentManagerProps,
+	DataRequestManagerProps as AdminDataRequestManagerProps,
+} from './Admin';
 export type {
 	ConsentMap,
 	ConsentState,
