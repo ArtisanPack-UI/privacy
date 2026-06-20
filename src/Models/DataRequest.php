@@ -79,12 +79,27 @@ class DataRequest extends Model
 		'regulation',
 		'reason',
 		'data',
-		'verification_token',
 		'verified_at',
 		'due_at',
 		'completed_at',
 		'processed_by',
 		'admin_notes',
+	];
+
+	/**
+	 * Attributes hidden from array / JSON serialization. Verification tokens
+	 * (plaintext + hashed) are written by {@see \ArtisanPackUI\Privacy\Services\DataRequestService}
+	 * and never reflected back to API callers.
+	 *
+	 * @var array<int, string>
+	 *
+	 * @deprecated 1.0 `verification_token` column is retained for backfill
+	 *             only; it will be dropped in 1.1 in favour of
+	 *             `verification_token_hash`.
+	 */
+	protected $hidden = [
+		'verification_token',
+		'verification_token_hash',
 	];
 
 	/**

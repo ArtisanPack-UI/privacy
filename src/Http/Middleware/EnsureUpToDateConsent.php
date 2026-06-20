@@ -97,7 +97,7 @@ class EnsureUpToDateConsent
 			return $next( $request );
 		}
 
-		if ( $this->reconsent->isUpToDate() ) {
+		if ( $this->reconsent->isUpToDate( null, null, $policy ) ) {
 			return $next( $request );
 		}
 
@@ -106,7 +106,7 @@ class EnsureUpToDateConsent
 
 		$this->notifyOnce( $request, $policy );
 
-		if ( $this->reconsent->isBlocked() && ! $this->isBypassRoute( $request ) ) {
+		if ( $this->reconsent->isBlocked( null, null, $policy ) && ! $this->isBypassRoute( $request ) ) {
 			return $this->buildBlockedResponse( $request );
 		}
 

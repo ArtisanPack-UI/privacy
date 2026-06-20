@@ -62,15 +62,9 @@ class BreachReportForm extends Component
 	 *
 	 * @return void
 	 */
-	public function mount(): void
+	public function booted(): void
 	{
-		$gate = (string) config( 'artisanpack.privacy.admin.gate', 'manage-privacy' );
-
-		if ( '' === $gate ) {
-			$gate = 'manage-privacy';
-		}
-
-		Gate::authorize( $gate );
+		$this->authorizeAdmin();
 	}
 
 	/**
@@ -152,6 +146,25 @@ class BreachReportForm extends Component
 	public function render(): View
 	{
 		return view( 'privacy::livewire.admin.breach-report-form' );
+	}
+
+	/**
+	 * Resolves the configured admin gate name (defaulting to `manage-privacy`)
+	 * and runs `Gate::authorize` against it.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @return void
+	 */
+	protected function authorizeAdmin(): void
+	{
+		$gate = (string) config( 'artisanpack.privacy.admin.gate', 'manage-privacy' );
+
+		if ( '' === $gate ) {
+			$gate = 'manage-privacy';
+		}
+
+		Gate::authorize( $gate );
 	}
 
 	/**

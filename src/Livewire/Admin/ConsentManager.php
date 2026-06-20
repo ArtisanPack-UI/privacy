@@ -120,15 +120,9 @@ class ConsentManager extends Component
 	 *
 	 * @return void
 	 */
-	public function mount(): void
+	public function booted(): void
 	{
-		$gate = (string) config( 'artisanpack.privacy.admin.gate', 'manage-privacy' );
-
-		if ( '' === $gate ) {
-			$gate = 'manage-privacy';
-		}
-
-		Gate::authorize( $gate );
+		$this->authorizeAdmin();
 	}
 
 	/**
@@ -373,6 +367,25 @@ class ConsentManager extends Component
 	}
 
 	/**
+	 * Resolves the configured admin gate name (defaulting to `manage-privacy`)
+	 * and runs `Gate::authorize` against it.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @return void
+	 */
+	protected function authorizeAdmin(): void
+	{
+		$gate = (string) config( 'artisanpack.privacy.admin.gate', 'manage-privacy' );
+
+		if ( '' === $gate ) {
+			$gate = 'manage-privacy';
+		}
+
+		Gate::authorize( $gate );
+	}
+
+	/**
 	 * Build the base query for the current filter state.
 	 *
 	 * @since 1.0.0
@@ -424,13 +437,17 @@ class ConsentManager extends Component
 
 		$term = trim( $this->search );
 
-		if ( '' !== $term ) {
+		// Skip the LIKE clause for short terms — a 1–2 character prefix
+		// matches too broadly to be useful and a leading wildcard search
+		// torpedoes any index. Three is short enough to match status codes
+		// (e.g. `gdpr`) without scanning the table.
+		if ( '' !== $term && strlen( $term ) >= 3 ) {
 			$query->where( function ( Builder $inner ) use ( $term ): void {
-				$inner->where( 'consentable_type', 'like', "%{$term}%" )
-					->orWhere( 'consentable_id', 'like', "%{$term}%" )
-					->orWhere( 'category', 'like', "%{$term}%" )
-					->orWhere( 'regulation', 'like', "%{$term}%" )
-					->orWhere( 'ip_address', 'like', "%{$term}%" );
+				$inner->where( 'consentable_type', 'like', "{$term}%" )
+					->orWhere( 'consentable_id', 'like', "{$term}%" )
+					->orWhere( 'category', 'like', "{$term}%" )
+					->orWhere( 'regulation', 'like', "{$term}%" )
+					->orWhere( 'ip_address', 'like', "{$term}%" );
 			} );
 		}
 

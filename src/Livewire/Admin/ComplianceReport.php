@@ -72,14 +72,6 @@ class ComplianceReport extends Component
 	 */
 	public function mount(): void
 	{
-		$gate = (string) config( 'artisanpack.privacy.admin.gate', 'manage-privacy' );
-
-		if ( '' === $gate ) {
-			$gate = 'manage-privacy';
-		}
-
-		Gate::authorize( $gate );
-
 		if ( '' === $this->from ) {
 			$this->from = now()->subDays( 30 )->toDateString();
 		}
@@ -87,6 +79,19 @@ class ComplianceReport extends Component
 		if ( '' === $this->to ) {
 			$this->to = now()->toDateString();
 		}
+	}
+
+	/**
+	 * Authorize the gate on every hydration so filter state updates can't
+	 * bypass the policy check after mount.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @return void
+	 */
+	public function booted(): void
+	{
+		$this->authorizeAdmin();
 	}
 
 	/**
@@ -212,6 +217,25 @@ class ComplianceReport extends Component
 	public function render(): View
 	{
 		return view( 'privacy::livewire.admin.compliance-report' );
+	}
+
+	/**
+	 * Resolves the configured admin gate name (defaulting to `manage-privacy`)
+	 * and runs `Gate::authorize` against it.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @return void
+	 */
+	protected function authorizeAdmin(): void
+	{
+		$gate = (string) config( 'artisanpack.privacy.admin.gate', 'manage-privacy' );
+
+		if ( '' === $gate ) {
+			$gate = 'manage-privacy';
+		}
+
+		Gate::authorize( $gate );
 	}
 
 	/**

@@ -64,17 +64,22 @@ class BreachDetail extends Component
 	 */
 	public function mount( ?int $breachId = null ): void
 	{
-		$gate = (string) config( 'artisanpack.privacy.admin.gate', 'manage-privacy' );
-
-		if ( '' === $gate ) {
-			$gate = 'manage-privacy';
-		}
-
-		Gate::authorize( $gate );
-
 		if ( null !== $breachId ) {
 			$this->breachId = $breachId;
 		}
+	}
+
+	/**
+	 * Authorize the gate on every hydration so the breach id can't be
+	 * swapped client-side to bypass the policy check.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @return void
+	 */
+	public function booted(): void
+	{
+		$this->authorizeAdmin();
 	}
 
 	/**
@@ -244,5 +249,24 @@ class BreachDetail extends Component
 		return view( 'privacy::livewire.admin.breach-detail', [
 			'service' => app( BreachNotificationService::class ),
 		] );
+	}
+
+	/**
+	 * Resolves the configured admin gate name (defaulting to `manage-privacy`)
+	 * and runs `Gate::authorize` against it.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @return void
+	 */
+	protected function authorizeAdmin(): void
+	{
+		$gate = (string) config( 'artisanpack.privacy.admin.gate', 'manage-privacy' );
+
+		if ( '' === $gate ) {
+			$gate = 'manage-privacy';
+		}
+
+		Gate::authorize( $gate );
 	}
 }

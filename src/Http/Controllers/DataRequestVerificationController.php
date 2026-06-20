@@ -50,7 +50,9 @@ class DataRequestVerificationController extends Controller
 	{
 		$request = $this->verifier->findByToken( $token );
 
-		abort_if( null === $request, 404, 'Verification link is invalid.' );
+		// Uniform 404 for both unknown and expired tokens so the page can't
+		// be used as an existence oracle (probing valid-but-expired tokens).
+		abort_if( null === $request, 404, __( 'This verification link is no longer valid.' ) );
 
 		return view( 'privacy::verification.show', [
 			'dataRequest' => $request,
@@ -73,12 +75,12 @@ class DataRequestVerificationController extends Controller
 	{
 		$dataRequest = $this->verifier->findByToken( $token );
 
-		abort_if( null === $dataRequest, 404, 'Verification link is invalid.' );
+		// Uniform 404 for both unknown and expired tokens so the endpoint
+		// can't be used as an existence oracle.
+		abort_if( null === $dataRequest, 404, __( 'This verification link is no longer valid.' ) );
 
 		if ( $this->verifier->isExpired( $dataRequest ) ) {
-			return redirect()
-				->route( 'privacy.verification.show', [ 'token' => $token ] )
-				->withErrors( [ 'token' => __( 'This verification link has expired. Please submit a new request.' ) ] );
+			abort( 404, __( 'This verification link is no longer valid.' ) );
 		}
 
 		$confirmed = $this->verifier->confirm( $dataRequest, config( 'artisanpack.privacy.data_requests.verification_method', 'email' ) );

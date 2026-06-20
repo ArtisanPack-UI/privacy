@@ -22,12 +22,16 @@ function makeVerificationRequest( string $token = 'verify-tok-1', bool $verified
 	$subject = TestSubject::create();
 
 	$request = DataRequest::query()->create( [
-		'requestable_type'   => $subject->getMorphClass(),
-		'requestable_id'     => $subject->getKey(),
-		'type'               => DataRequest::TYPE_ACCESS,
-		'status'             => DataRequest::STATUS_PENDING,
-		'verification_token' => $token,
+		'requestable_type' => $subject->getMorphClass(),
+		'requestable_id'   => $subject->getKey(),
+		'type'             => DataRequest::TYPE_ACCESS,
+		'status'           => DataRequest::STATUS_PENDING,
 	] );
+
+	$request->forceFill( [
+		'verification_token'      => $token,
+		'verification_token_hash' => hash( 'sha256', $token ),
+	] )->save();
 
 	if ( $verified ) {
 		$request->update( [ 'verified_at' => now() ] );
@@ -62,7 +66,7 @@ it( 'flips the request to processing on POST', function (): void {
 	expect( $request->status )->toBe( DataRequest::STATUS_PROCESSING );
 } );
 
-it( 'redirects with an expired errors bag for a stale token', function (): void {
+it( 'returns a uniform 404 for a stale token to avoid an existence oracle', function (): void {
 	config()->set( 'artisanpack.privacy.verification.token_ttl_minutes', 1 );
 
 	$request = makeVerificationRequest( 'stale-token-1' );
@@ -70,8 +74,7 @@ it( 'redirects with an expired errors bag for a stale token', function (): void 
 
 	$response = $this->post( route( 'privacy.verification.verify', [ 'token' => 'stale-token-1' ] ) );
 
-	$response->assertRedirect();
-	$response->assertSessionHasErrors( [ 'token' ] );
+	$response->assertNotFound();
 	$request->refresh();
 	expect( $request->verified_at )->toBeNull();
 } );

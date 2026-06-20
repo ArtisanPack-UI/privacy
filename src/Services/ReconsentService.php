@@ -30,6 +30,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 
 /**
@@ -39,6 +40,15 @@ use Illuminate\Support\Facades\Event;
  */
 class ReconsentService
 {
+	/**
+	 * Per-request memo of resolved policies, keyed by `regulation|locale`.
+	 * Avoids hitting the cache (and therefore serialization) more than once
+	 * inside a single request.
+	 *
+	 * @var array<string, PrivacyPolicy|null>
+	 */
+	protected array $policyMemo = [];
+
 	/**
 	 * @param ConsentService $consents Inner consent service used to read state.
 	 */
@@ -59,33 +69,75 @@ class ReconsentService
 	 */
 	public function currentPolicy( ?string $regulation = null, ?string $locale = null ): ?PrivacyPolicy
 	{
-		// Resolve the regulation in a way that honours both regulation-tagged
-		// and general (NULL) policies — callers that don't know the visitor's
-		// applicable regulation should still find the active GDPR/CCPA/LGPD/
-		// PIPEDA row instead of only matching `regulation IS NULL`.
-		$base = PrivacyPolicy::query()->active()->latestFirst();
+		$memoKey = ( $regulation ?? '_' ) . '|' . ( $locale ?? '_' );
 
-		if ( is_string( $regulation ) && '' !== $regulation ) {
-			$specific = $this->firstForLocale(
-				( clone $base )->forRegulation( $regulation ),
+		if ( array_key_exists( $memoKey, $this->policyMemo ) ) {
+			return $this->policyMemo[ $memoKey ];
+		}
+
+		$ttl      = (int) config( 'artisanpack.privacy.cache.policy_ttl', 600 );
+		$cacheKey = $this->policyCacheKey( $regulation, $locale );
+
+		$policy = Cache::remember( $cacheKey, $ttl, function () use ( $regulation, $locale ): ?PrivacyPolicy {
+			// Resolve the regulation in a way that honours both regulation-tagged
+			// and general (NULL) policies — callers that don't know the visitor's
+			// applicable regulation should still find the active GDPR/CCPA/LGPD/
+			// PIPEDA row instead of only matching `regulation IS NULL`.
+			$base = PrivacyPolicy::query()->active()->latestFirst();
+
+			if ( is_string( $regulation ) && '' !== $regulation ) {
+				$specific = $this->firstForLocale(
+					( clone $base )->forRegulation( $regulation ),
+					$locale,
+				);
+
+				if ( $specific instanceof PrivacyPolicy ) {
+					return $specific;
+				}
+			}
+
+			$general = $this->firstForLocale(
+				( clone $base )->forRegulation( null ),
 				$locale,
 			);
 
-			if ( $specific instanceof PrivacyPolicy ) {
-				return $specific;
+			if ( $general instanceof PrivacyPolicy ) {
+				return $general;
 			}
-		}
 
-		$general = $this->firstForLocale(
-			( clone $base )->forRegulation( null ),
-			$locale,
+			return $this->firstForLocale( $base, $locale );
+		} );
+
+		$this->policyMemo[ $memoKey ] = $policy;
+
+		return $policy;
+	}
+
+	/**
+	 * Invalidates every cached `currentPolicy()` permutation. Called by the
+	 * service provider observer whenever a {@see PrivacyPolicy} row is saved
+	 * or deleted so the next request resolves fresh data.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @return void
+	 */
+	public function forgetPolicyCache(): void
+	{
+		$this->policyMemo = [];
+
+		$regulations = array_merge(
+			[ null ],
+			array_keys( (array) config( 'artisanpack.privacy.regulations', [] ) ),
 		);
 
-		if ( $general instanceof PrivacyPolicy ) {
-			return $general;
-		}
+		$locales = [ null, (string) ( config( 'app.locale' ) ?? 'en' ) ];
 
-		return $this->firstForLocale( $base, $locale );
+		foreach ( $regulations as $regulation ) {
+			foreach ( $locales as $locale ) {
+				Cache::forget( $this->policyCacheKey( $regulation, $locale ) );
+			}
+		}
 	}
 
 	/**
@@ -99,9 +151,9 @@ class ReconsentService
 	 *
 	 * @return bool
 	 */
-	public function isUpToDate( ?Model $user = null, ?string $regulation = null ): bool
+	public function isUpToDate( ?Model $user = null, ?string $regulation = null, ?PrivacyPolicy $policy = null ): bool
 	{
-		$policy = $this->currentPolicy( $regulation );
+		$policy = $policy ?? $this->currentPolicy( $regulation );
 
 		if ( ! $policy instanceof PrivacyPolicy || true !== (bool) $policy->requires_reconsent ) {
 			return true;
@@ -152,17 +204,17 @@ class ReconsentService
 	 *
 	 * @return bool
 	 */
-	public function isBlocked( ?Model $user = null, ?string $regulation = null ): bool
+	public function isBlocked( ?Model $user = null, ?string $regulation = null, ?PrivacyPolicy $policy = null ): bool
 	{
 		if ( true !== (bool) config( 'artisanpack.privacy.policy.block_on_no_reconsent', false ) ) {
 			return false;
 		}
 
-		if ( $this->isUpToDate( $user, $regulation ) ) {
+		$policy = $policy ?? $this->currentPolicy( $regulation );
+
+		if ( $this->isUpToDate( $user, $regulation, $policy ) ) {
 			return false;
 		}
-
-		$policy = $this->currentPolicy( $regulation );
 
 		if ( ! $policy instanceof PrivacyPolicy ) {
 			return false;
@@ -246,6 +298,25 @@ class ReconsentService
 		$subject = $user ?? Auth::user();
 
 		Event::dispatch( new PolicyReconsentRequired( $policy, $subject, $request ) );
+	}
+
+	/**
+	 * Returns the cache key used to memoise the active-policy resolver.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  string|null  $regulation Regulation key or null.
+	 * @param  string|null  $locale     Locale or null.
+	 *
+	 * @return string
+	 */
+	protected function policyCacheKey( ?string $regulation, ?string $locale ): string
+	{
+		return sprintf(
+			'privacy.policy.current.%s.%s',
+			$regulation ?? '_general',
+			$locale ?? '_default',
+		);
 	}
 
 	/**

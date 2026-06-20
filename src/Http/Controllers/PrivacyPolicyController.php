@@ -23,6 +23,7 @@ namespace ArtisanPackUI\Privacy\Http\Controllers;
 use ArtisanPackUI\Privacy\Models\PrivacyPolicy;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
@@ -111,12 +112,18 @@ class PrivacyPolicyController
 	 */
 	protected function renderPolicy( PrivacyPolicy $policy, string $locale ): View
 	{
-		$history = PrivacyPolicy::query()
-			->forRegulation( $policy->regulation )
-			->forLocale( $policy->locale )
-			->whereNotNull( 'published_at' )
-			->latestFirst()
-			->get();
+		$history = Cache::remember(
+			"privacy.policy.history.{$policy->id}",
+			3600,
+			static fn () => PrivacyPolicy::query()
+				->forRegulation( $policy->regulation )
+				->forLocale( $policy->locale )
+				->whereNotNull( 'published_at' )
+				->latestFirst()
+				->select( [ 'id', 'version', 'locale', 'regulation', 'published_at' ] )
+				->limit( 50 )
+				->get(),
+		);
 
 		$availableLocales = PrivacyPolicy::query()
 			->forRegulation( $policy->regulation )

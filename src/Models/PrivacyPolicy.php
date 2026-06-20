@@ -20,6 +20,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -222,10 +223,13 @@ class PrivacyPolicy extends Model
 	 */
 	public function renderHtml(): string
 	{
-		return Str::markdown( (string) $this->content, [
+		$version = (string) ( $this->updated_at?->timestamp ?? 0 );
+		$key     = "privacy.policy.{$this->id}.html.v{$version}";
+
+		return Cache::remember( $key, 86400, fn (): string => Str::markdown( (string) $this->content, [
 			'html_input'         => 'escape',
 			'allow_unsafe_links' => false,
-		] );
+		] ) );
 	}
 
 	/**

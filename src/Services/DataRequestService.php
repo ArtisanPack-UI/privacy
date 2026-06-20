@@ -155,17 +155,31 @@ class DataRequestService
 	protected function create( Model $subject, string $type, ?string $reason ): DataRequest
 	{
 		$regulation = $this->consents->getApplicableRegulation();
+		$plaintext  = Str::random( 40 );
 
-		return DataRequest::query()->create( [
-			'requestable_type'   => $subject->getMorphClass(),
-			'requestable_id'     => $subject->getKey(),
-			'type'               => $type,
-			'status'             => DataRequest::STATUS_PENDING,
-			'regulation'         => $regulation,
-			'reason'             => $reason,
-			'verification_token' => Str::random( 40 ),
-			'due_at'             => $this->resolveDueDate( $regulation, $type ),
+		$request = DataRequest::query()->create( [
+			'requestable_type' => $subject->getMorphClass(),
+			'requestable_id'   => $subject->getKey(),
+			'type'             => $type,
+			'status'           => DataRequest::STATUS_PENDING,
+			'regulation'       => $regulation,
+			'reason'           => $reason,
+			'due_at'           => $this->resolveDueDate( $regulation, $type ),
 		] );
+
+		// Persist both columns via a forced write so `verification_token` is
+		// not driven through mass assignment (kept off `$fillable` so admin
+		// API payloads can't smuggle a forged token in).
+		//
+		// @deprecated 1.0 The plaintext `verification_token` column is
+		// retained for backfill only and will be removed in 1.1; new
+		// lookups should go through `verification_token_hash`.
+		$request->forceFill( [
+			'verification_token'      => $plaintext,
+			'verification_token_hash' => hash( 'sha256', $plaintext ),
+		] )->save();
+
+		return $request;
 	}
 
 	/**
