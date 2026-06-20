@@ -34,6 +34,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
  * @property string                           $category
  * @property bool                             $granted
  * @property string|null                      $regulation
+ * @property string|null                      $policy_version
  * @property string|null                      $ip_address
  * @property string|null                      $user_agent
  * @property array|null                       $metadata
@@ -69,6 +70,7 @@ class Consent extends Model
 		'category',
 		'granted',
 		'regulation',
+		'policy_version',
 		'ip_address',
 		'user_agent',
 		'metadata',

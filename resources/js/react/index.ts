@@ -18,6 +18,11 @@ export type {
 	PrivacyDashboardRequest,
 	PrivacyDashboardHistoryPayload,
 } from './PrivacyDashboard';
+export { PolicyReconsentBanner } from './PolicyReconsentBanner';
+export type {
+	PolicyReconsentBannerProps,
+	PolicyReconsentPayload,
+} from './PolicyReconsentBanner';
 export { useConsent } from './useConsent';
 export type { UseConsentOptions, UseConsentResult } from './useConsent';
 export {

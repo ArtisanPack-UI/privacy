@@ -356,7 +356,47 @@ return [
 			'show_customize'  => true,
 			'blur_background' => false,
 		],
-		'theme' => 'auto',
+		'policy' => [
+			'custom_css_class'      => env( 'PRIVACY_POLICY_VIEW_CLASS', '' ),
+			'show_version_history'  => true,
+			'show_locale_switcher'  => true,
+		],
+
+		/*
+		| Banner-wide presentation toggles consumed by both the Livewire
+		| views and their React/Vue counterparts so customising one stays
+		| in sync with the other. `use_daisyui` allows applications that
+		| don't ship daisyUI to opt out of the default button classes.
+		*/
+		'animation'       => env( 'PRIVACY_UI_ANIMATION', 'slide-up' ),
+		'z_index'         => (int) env( 'PRIVACY_UI_Z_INDEX', 9999 ),
+		'custom_css_class' => env( 'PRIVACY_UI_CUSTOM_CLASS', '' ),
+		'use_daisyui'     => env( 'PRIVACY_UI_USE_DAISYUI', true ),
+		'theme'           => 'auto',
+	],
+
+	/*
+	|--------------------------------------------------------------------------
+	| Policy Lifecycle
+	|--------------------------------------------------------------------------
+	|
+	| Controls the public-facing policy display and the re-consent workflow.
+	| `reconsent_grace_period_days` allows users to keep using the
+	| application while they review a new policy; `block_on_no_reconsent`
+	| escalates to a hard block once the grace period elapses.
+	|
+	*/
+	'policy' => [
+		'path'                        => env( 'PRIVACY_POLICY_PATH', 'policy' ),
+		'reconsent_path'              => env( 'PRIVACY_RECONSENT_PATH', 'reconsent' ),
+		'reconsent_grace_period_days' => (int) env( 'PRIVACY_RECONSENT_GRACE_DAYS', 30 ),
+		'block_on_no_reconsent'       => (bool) env( 'PRIVACY_RECONSENT_BLOCK', false ),
+		'retention_account_days'      => (int) env( 'PRIVACY_RETENTION_ACCOUNT_DAYS', 90 ),
+		'blocked_response' => [
+			'status'         => 403,
+			'redirect_route' => 'privacy.policy.show',
+			'message'        => 'You must accept the updated privacy policy to continue.',
+		],
 	],
 
 	/*

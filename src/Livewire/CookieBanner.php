@@ -90,25 +90,61 @@ class CookieBanner extends Component
 	public array $selected = [];
 
 	/**
+	 * Extra CSS classes applied to the banner outer container.
+	 *
+	 * @var string
+	 */
+	public string $class = '';
+
+	/**
+	 * Extra CSS classes applied to the action buttons.
+	 *
+	 * @var string
+	 */
+	public string $buttonClasses = '';
+
+	/**
+	 * Overrides for the labels rendered inside the banner.
+	 *
+	 * Recognised keys: `title`, `description`, `accept_all`, `reject_all`,
+	 * `customise`, `save`, `required_badge`.
+	 *
+	 * @var array<string, string>
+	 */
+	public array $labels = [];
+
+	/**
 	 * Mount the component.
 	 *
 	 * @since 1.0.0
 	 *
-	 * @param  string|null  $position   Override the configured banner position.
-	 * @param  string|null  $style      Override the configured banner style.
-	 * @param  array|null   $categories Explicit cookie-category map override.
+	 * @param  string|null            $position      Override the configured banner position.
+	 * @param  string|null            $style         Override the configured banner style.
+	 * @param  array|null             $categories    Explicit cookie-category map override.
+	 * @param  string|null            $class         Extra CSS classes on the outer container.
+	 * @param  string|null            $buttonClasses Extra CSS classes on the action buttons.
+	 * @param  array<string, string>  $labels        Label overrides for the rendered copy.
 	 *
 	 * @return void
 	 */
-	public function mount( ?string $position = null, ?string $style = null, ?array $categories = null ): void
-	{
+	public function mount(
+		?string $position = null,
+		?string $style = null,
+		?array $categories = null,
+		?string $class = null,
+		?string $buttonClasses = null,
+		array $labels = [],
+	): void {
 		$ui = (array) config( 'artisanpack.privacy.ui.cookie_banner', [] );
 
-		$this->position   = $position ?? (string) ( $ui['position'] ?? 'bottom' );
-		$this->style      = $style ?? (string) ( $ui['style'] ?? 'bar' );
-		$this->categories = $categories ?? $this->resolveCategories();
-		$this->selected   = $this->previousSelections();
-		$this->visible    = ! $this->hasExistingConsent() || $this->hasExpiredConsent();
+		$this->position      = $position ?? (string) ( $ui['position'] ?? 'bottom' );
+		$this->style         = $style ?? (string) ( $ui['style'] ?? 'bar' );
+		$this->categories    = $categories ?? $this->resolveCategories();
+		$this->selected      = $this->previousSelections();
+		$this->visible       = ! $this->hasExistingConsent() || $this->hasExpiredConsent();
+		$this->class         = $class ?? (string) config( 'artisanpack.privacy.ui.custom_css_class', '' );
+		$this->buttonClasses = $buttonClasses ?? '';
+		$this->labels        = $labels;
 	}
 
 	/**

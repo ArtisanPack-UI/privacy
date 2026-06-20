@@ -13,6 +13,8 @@ export type {
 	PrivacyDashboardRequest,
 	PrivacyDashboardHistoryPayload,
 } from './PrivacyDashboard.vue';
+export { default as PolicyReconsentBanner } from './PolicyReconsentBanner.vue';
+export type { PolicyReconsentPayload } from './PolicyReconsentBanner.vue';
 export { useConsent } from './useConsent';
 export type { UseConsentOptions, UseConsentResult } from './useConsent';
 export {
