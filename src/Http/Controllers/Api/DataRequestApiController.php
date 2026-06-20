@@ -21,9 +21,11 @@ namespace ArtisanPackUI\Privacy\Http\Controllers\Api;
 
 use ArtisanPackUI\Privacy\Http\Requests\StoreDataRequestRequest;
 use ArtisanPackUI\Privacy\Models\DataRequest;
+use ArtisanPackUI\Privacy\Regulations\RegulationRegistry;
 use ArtisanPackUI\Privacy\Services\DataRequestService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Auth;
 
@@ -74,5 +76,61 @@ class DataRequestApiController extends Controller
 			'status'            => $result->status,
 			'verification_sent' => (bool) config( 'artisanpack.privacy.data_requests.require_verification', true ),
 		], 201 );
+	}
+
+	/**
+	 * GET /api/privacy/data-requests
+	 *
+	 * Returns the authenticated subject's own request history plus the
+	 * currently-applicable regulation so the dashboard can show both in a
+	 * single round trip.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  Request             $request HTTP request.
+	 * @param  RegulationRegistry  $registry Regulation registry.
+	 *
+	 * @return JsonResponse
+	 */
+	public function index( Request $request, RegulationRegistry $registry ): JsonResponse
+	{
+		$subject = Auth::user();
+
+		if ( ! $subject instanceof Model ) {
+			return response()->json( [ 'message' => __( 'Authentication required.' ) ], 401 );
+		}
+
+		$limit = max( 1, min( 100, (int) $request->query( 'limit', '25' ) ) );
+
+		$rows = DataRequest::query()
+			->where( 'requestable_type', $subject->getMorphClass() )
+			->where( 'requestable_id', $subject->getKey() )
+			->orderByDesc( 'created_at' )
+			->limit( $limit )
+			->get();
+
+		$applicable = $registry->applicableFor( $request );
+
+		return response()->json( [
+			'regulation' => $applicable?->key(),
+			'requests'   => $rows->map( static function ( DataRequest $row ): array {
+				$payload     = is_array( $row->data ) ? $row->data : [];
+				$downloadUrl = is_string( $payload['download_url'] ?? null ) ? (string) $payload['download_url'] : null;
+
+				return [
+					'id'           => $row->id,
+					'type'         => $row->type,
+					'status'       => $row->status,
+					'regulation'   => $row->regulation,
+					'created_at'   => $row->created_at?->toIso8601String(),
+					'due_at'       => $row->due_at?->toIso8601String(),
+					'completed_at' => $row->completed_at?->toIso8601String(),
+					'download_url' => DataRequest::TYPE_EXPORT === $row->type
+						&& DataRequest::STATUS_COMPLETED === $row->status
+							? $downloadUrl
+							: null,
+				];
+			} )->all(),
+		] );
 	}
 }

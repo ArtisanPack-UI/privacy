@@ -429,28 +429,13 @@ class ConsentService
 	 */
 	public function getApplicableRegulation(): ?string
 	{
-		$regulations = (array) config( 'artisanpack.privacy.regulations', [] );
-		$region      = config( 'artisanpack.privacy.geolocation.fallback_region' );
-
-		if ( null !== $region ) {
-			foreach ( $regulations as $key => $config ) {
-				if ( ! ( $config['enabled'] ?? false ) ) {
-					continue;
-				}
-
-				if ( in_array( $region, (array) ( $config['applies_to'] ?? [] ), true ) ) {
-					return (string) $key;
-				}
-			}
-		}
-
-		foreach ( $regulations as $key => $config ) {
-			if ( $config['enabled'] ?? false ) {
-				return (string) $key;
-			}
-		}
-
-		return null;
+		// Delegate to the regulation registry so consent rows, data requests,
+		// and the user-facing dashboard all agree on the same key for any
+		// given request. The registry's `currentKey()` already implements the
+		// region-match-then-first-enabled fallback this method used to do
+		// inline, so callers in console contexts (where no request signals
+		// are available) still get a sensible default.
+		return app( \ArtisanPackUI\Privacy\Regulations\RegulationRegistry::class )->currentKey();
 	}
 
 	/**
