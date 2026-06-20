@@ -23,4 +23,5 @@ use Illuminate\Support\Facades\Route;
 Route::get( '/consent', [ ConsentApiController::class, 'show' ] )->name( 'privacy.api.consent.show' );
 Route::post( '/consent', [ ConsentApiController::class, 'update' ] )->name( 'privacy.api.consent.update' );
 Route::get( '/categories', CategoriesApiController::class )->name( 'privacy.api.categories' );
+Route::get( '/data-requests', [ DataRequestApiController::class, 'index' ] )->name( 'privacy.api.data-requests.index' );
 Route::post( '/data-requests', [ DataRequestApiController::class, 'store' ] )->name( 'privacy.api.data-requests.store' );

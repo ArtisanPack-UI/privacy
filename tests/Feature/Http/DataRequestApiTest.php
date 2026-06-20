@@ -88,3 +88,45 @@ it( 'accepts a missing reason', function (): void {
 		'type' => DataRequest::TYPE_EXPORT,
 	] )->assertCreated();
 } );
+
+it( 'returns 401 when an unauthenticated visitor requests their history', function (): void {
+	$this->getJson( '/api/privacy/data-requests' )->assertUnauthorized();
+} );
+
+it( 'returns the authenticated subject history with download URLs for completed exports', function (): void {
+	$subject = TestSubject::create();
+	$this->actingAs( $subject );
+
+	$export = DataRequest::query()->create( [
+		'requestable_type' => $subject->getMorphClass(),
+		'requestable_id'   => $subject->getKey(),
+		'type'             => DataRequest::TYPE_EXPORT,
+		'status'           => DataRequest::STATUS_COMPLETED,
+		'data'             => [ 'download_url' => 'https://example.test/export.json' ],
+	] );
+
+	$pending = DataRequest::query()->create( [
+		'requestable_type' => $subject->getMorphClass(),
+		'requestable_id'   => $subject->getKey(),
+		'type'             => DataRequest::TYPE_ACCESS,
+		'status'           => DataRequest::STATUS_PENDING,
+	] );
+
+	$response = $this->getJson( '/api/privacy/data-requests?limit=10' );
+
+	$response->assertOk();
+	$response->assertJsonCount( 2, 'requests' );
+
+	$payload = $response->json();
+	$ids     = array_column( $payload['requests'], 'id' );
+
+	expect( $ids )->toContain( $export->id, $pending->id );
+
+	$exportPayload = collect( $payload['requests'] )->firstWhere( 'id', $export->id );
+
+	expect( $exportPayload['download_url'] )->toBe( 'https://example.test/export.json' );
+
+	$pendingPayload = collect( $payload['requests'] )->firstWhere( 'id', $pending->id );
+
+	expect( $pendingPayload['download_url'] )->toBeNull();
+} );

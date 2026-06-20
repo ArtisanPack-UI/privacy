@@ -14,12 +14,15 @@
  * @since      1.0.0
  */
 
+use ArtisanPackUI\Privacy\Contracts\PrivacyRegulation;
 use ArtisanPackUI\Privacy\Models\DataRequest;
 use ArtisanPackUI\Privacy\Privacy;
+use ArtisanPackUI\Privacy\Regulations\RegulationRegistry;
 use ArtisanPackUI\Privacy\Services\AnonymizationService;
 use ArtisanPackUI\Privacy\Services\ConsentService;
 use ArtisanPackUI\Privacy\Services\DataRequestService;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\Request;
 
 if ( ! function_exists( 'privacy' ) ) {
 	/**
@@ -64,6 +67,37 @@ if ( ! function_exists( 'privacyGetRegulation' ) ) {
 	function privacyGetRegulation(): ?string
 	{
 		return app( ConsentService::class )->getApplicableRegulation();
+	}
+}
+
+if ( ! function_exists( 'privacyRegulations' ) ) {
+	/**
+	 * Returns the regulation registry.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @return RegulationRegistry
+	 */
+	function privacyRegulations(): RegulationRegistry
+	{
+		return app( RegulationRegistry::class );
+	}
+}
+
+if ( ! function_exists( 'getApplicableRegulation' ) ) {
+	/**
+	 * Returns the highest-priority {@see PrivacyRegulation} that applies to
+	 * the supplied (or current) request, or null when none apply.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  Request|null  $request  Request to evaluate. Defaults to the current request.
+	 *
+	 * @return PrivacyRegulation|null
+	 */
+	function getApplicableRegulation( ?Request $request = null ): ?PrivacyRegulation
+	{
+		return app( RegulationRegistry::class )->applicableFor( $request );
 	}
 }
 

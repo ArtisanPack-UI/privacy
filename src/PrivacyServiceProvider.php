@@ -20,6 +20,7 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\Privacy;
 
+use ArtisanPackUI\Privacy\Console\Commands\PrivacyScan;
 use ArtisanPackUI\Privacy\Console\Commands\PurgeExpiredConsents;
 use ArtisanPackUI\Privacy\Events\ConsentGiven;
 use ArtisanPackUI\Privacy\Events\ConsentWithdrawn;
@@ -37,12 +38,15 @@ use ArtisanPackUI\Privacy\Listeners\SyncConsentOnLogin;
 use ArtisanPackUI\Privacy\Livewire\ConsentPreferences;
 use ArtisanPackUI\Privacy\Livewire\CookieBanner;
 use ArtisanPackUI\Privacy\Livewire\DataRequestForm;
+use ArtisanPackUI\Privacy\Livewire\PrivacyDashboard;
 use ArtisanPackUI\Privacy\Livewire\VerifyDataRequest;
+use ArtisanPackUI\Privacy\Regulations\RegulationRegistry;
 use ArtisanPackUI\Privacy\Services\AnonymizationService;
 use ArtisanPackUI\Privacy\Services\ConsentService;
 use ArtisanPackUI\Privacy\Services\DataDeletionService;
 use ArtisanPackUI\Privacy\Services\DataExportService;
 use ArtisanPackUI\Privacy\Services\DataRequestService;
+use ArtisanPackUI\Privacy\Services\PersonalDataScanner;
 use ArtisanPackUI\Privacy\Services\VerificationService;
 use ArtisanPackUI\Privacy\View\PrivacyDirectives;
 use Illuminate\Auth\Events\Login;
@@ -139,6 +143,12 @@ class PrivacyServiceProvider extends ServiceProvider
 
 		$this->app->singleton( VerificationService::class, fn () => new VerificationService() );
 		$this->app->alias( VerificationService::class, 'privacy.verification' );
+
+		$this->app->singleton( RegulationRegistry::class, fn () => new RegulationRegistry() );
+		$this->app->alias( RegulationRegistry::class, 'privacy.regulations' );
+
+		$this->app->singleton( PersonalDataScanner::class, fn () => new PersonalDataScanner() );
+		$this->app->alias( PersonalDataScanner::class, 'privacy.scanner' );
 	}
 
 	/**
@@ -260,6 +270,7 @@ class PrivacyServiceProvider extends ServiceProvider
 
 		$this->commands( [
 			PurgeExpiredConsents::class,
+			PrivacyScan::class,
 		] );
 	}
 
@@ -435,5 +446,6 @@ class PrivacyServiceProvider extends ServiceProvider
 		\Livewire\Livewire::component( 'privacy-consent-preferences', ConsentPreferences::class );
 		\Livewire\Livewire::component( 'privacy-data-request-form', DataRequestForm::class );
 		\Livewire\Livewire::component( 'privacy-verify-data-request', VerifyDataRequest::class );
+		\Livewire\Livewire::component( 'privacy-dashboard', PrivacyDashboard::class );
 	}
 }
