@@ -30,7 +30,10 @@ use ArtisanPackUI\Privacy\Events\DataBreach;
 use ArtisanPackUI\Privacy\Events\DataDeletionRequested;
 use ArtisanPackUI\Privacy\Events\DataExportRequested;
 use ArtisanPackUI\Privacy\Events\DataRectificationRequested;
+use ArtisanPackUI\Privacy\Events\PolicyReconsentGiven;
+use ArtisanPackUI\Privacy\Events\PolicyReconsentRequired;
 use ArtisanPackUI\Privacy\Listeners\LogConsentActivity;
+use ArtisanPackUI\Privacy\Listeners\LogPolicyReconsent;
 use ArtisanPackUI\Privacy\Listeners\NotifyAdminOfRequest;
 use ArtisanPackUI\Privacy\Listeners\NotifyDataBreach;
 use ArtisanPackUI\Privacy\Listeners\ProcessDataAccessRequest;
@@ -45,6 +48,7 @@ use ArtisanPackUI\Privacy\Livewire\Admin\DataRequestManager;
 use ArtisanPackUI\Privacy\Livewire\ConsentPreferences;
 use ArtisanPackUI\Privacy\Livewire\CookieBanner;
 use ArtisanPackUI\Privacy\Livewire\DataRequestForm;
+use ArtisanPackUI\Privacy\Livewire\PolicyReconsentBanner;
 use ArtisanPackUI\Privacy\Livewire\PrivacyDashboard;
 use ArtisanPackUI\Privacy\Livewire\VerifyDataRequest;
 use ArtisanPackUI\Privacy\Regulations\Ccpa;
@@ -59,6 +63,8 @@ use ArtisanPackUI\Privacy\Services\DataExportService;
 use ArtisanPackUI\Privacy\Services\DataRequestService;
 use ArtisanPackUI\Privacy\Services\GeoLocationService;
 use ArtisanPackUI\Privacy\Services\PersonalDataScanner;
+use ArtisanPackUI\Privacy\Services\PrivacyPolicyGenerator;
+use ArtisanPackUI\Privacy\Services\ReconsentService;
 use ArtisanPackUI\Privacy\Services\VerificationService;
 use ArtisanPackUI\Privacy\View\PrivacyDirectives;
 use Illuminate\Auth\Events\Login;
@@ -110,6 +116,12 @@ class PrivacyServiceProvider extends ServiceProvider
 		],
 		DataBreach::class => [
 			[ NotifyDataBreach::class, 'handle' ],
+		],
+		PolicyReconsentRequired::class => [
+			[ LogPolicyReconsent::class, 'handleRequired' ],
+		],
+		PolicyReconsentGiven::class => [
+			[ LogPolicyReconsent::class, 'handleGiven' ],
 		],
 		Login::class => [
 			[ SyncConsentOnLogin::class, 'handle' ],
@@ -176,6 +188,15 @@ class PrivacyServiceProvider extends ServiceProvider
 
 		$this->app->singleton( GeoLocationService::class, fn () => new GeoLocationService() );
 		$this->app->alias( GeoLocationService::class, 'privacy.geolocation' );
+
+		$this->app->singleton( PrivacyPolicyGenerator::class, fn () => new PrivacyPolicyGenerator() );
+		$this->app->alias( PrivacyPolicyGenerator::class, 'privacy.policy_generator' );
+
+		$this->app->singleton(
+			ReconsentService::class,
+			fn ( $app ) => new ReconsentService( $app->make( ConsentService::class ) ),
+		);
+		$this->app->alias( ReconsentService::class, 'privacy.reconsent' );
 	}
 
 	/**
@@ -266,6 +287,22 @@ class PrivacyServiceProvider extends ServiceProvider
 			$this->publishes( [
 				$adminLayout => resource_path( 'views/vendor/artisanpack-ui/privacy/admin/layout.blade.php' ),
 			], 'privacy-admin-layout' );
+		}
+
+		$policyTemplates = __DIR__ . '/../resources/templates/policies';
+
+		if ( is_dir( $policyTemplates ) ) {
+			$this->publishes( [
+				$policyTemplates => resource_path( 'views/vendor/artisanpack-ui/privacy/templates/policies' ),
+			], 'privacy-policy-templates' );
+		}
+
+		$cssFile = __DIR__ . '/../resources/css/privacy.css';
+
+		if ( is_file( $cssFile ) ) {
+			$this->publishes( [
+				$cssFile => resource_path( 'css/vendor/artisanpack-ui/privacy.css' ),
+			], 'privacy-css' );
 		}
 	}
 
@@ -465,6 +502,7 @@ class PrivacyServiceProvider extends ServiceProvider
 		$router->aliasMiddleware( 'privacy.consent', Http\Middleware\EnsureConsentGiven::class );
 		$router->aliasMiddleware( 'privacy.context', Http\Middleware\CheckCookieConsent::class );
 		$router->aliasMiddleware( 'privacy.geolocate', Http\Middleware\GeolocateUser::class );
+		$router->aliasMiddleware( 'privacy.reconsent', Http\Middleware\EnsureUpToDateConsent::class );
 	}
 
 	/**
@@ -554,6 +592,7 @@ class PrivacyServiceProvider extends ServiceProvider
 		\Livewire\Livewire::component( 'privacy-data-request-form', DataRequestForm::class );
 		\Livewire\Livewire::component( 'privacy-verify-data-request', VerifyDataRequest::class );
 		\Livewire\Livewire::component( 'privacy-dashboard', PrivacyDashboard::class );
+		\Livewire\Livewire::component( 'privacy-policy-reconsent-banner', PolicyReconsentBanner::class );
 		\Livewire\Livewire::component( 'privacy-admin-consent-manager', ConsentManager::class );
 		\Livewire\Livewire::component( 'privacy-admin-data-request-manager', DataRequestManager::class );
 		\Livewire\Livewire::component( 'privacy-admin-compliance-report', ComplianceReport::class );
