@@ -17,3 +17,25 @@ export type {
 	AdminDataRequestRow,
 	DataRequestManagerProps,
 } from './DataRequestManager';
+export { ComplianceReport } from './ComplianceReport';
+export type {
+	ComplianceBreachStats,
+	ComplianceConsentStats,
+	ComplianceReportPayload,
+	ComplianceReportProps,
+	ComplianceReportResponse,
+	ComplianceRequestStats,
+} from './ComplianceReport';
+export { BreachManager } from './BreachManager';
+export type {
+	AdminBreachPayload,
+	AdminBreachRow,
+	BreachManagerProps,
+} from './BreachManager';
+export { BreachReportForm } from './BreachReportForm';
+export type { BreachReportFormProps } from './BreachReportForm';
+export { BreachDetail } from './BreachDetail';
+export type {
+	AdminBreachDetailPayload,
+	BreachDetailProps,
+} from './BreachDetail';

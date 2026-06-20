@@ -20,6 +20,7 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\Privacy;
 
+use ArtisanPackUI\Privacy\Console\Commands\PrivacyInstall;
 use ArtisanPackUI\Privacy\Console\Commands\PrivacyScan;
 use ArtisanPackUI\Privacy\Console\Commands\PurgeExpiredConsents;
 use ArtisanPackUI\Privacy\Events\ConsentGiven;
@@ -35,6 +36,10 @@ use ArtisanPackUI\Privacy\Listeners\NotifyDataBreach;
 use ArtisanPackUI\Privacy\Listeners\ProcessDataAccessRequest;
 use ArtisanPackUI\Privacy\Listeners\ProcessDataExportRequest;
 use ArtisanPackUI\Privacy\Listeners\SyncConsentOnLogin;
+use ArtisanPackUI\Privacy\Livewire\Admin\BreachDetail;
+use ArtisanPackUI\Privacy\Livewire\Admin\BreachManager;
+use ArtisanPackUI\Privacy\Livewire\Admin\BreachReportForm;
+use ArtisanPackUI\Privacy\Livewire\Admin\ComplianceReport;
 use ArtisanPackUI\Privacy\Livewire\Admin\ConsentManager;
 use ArtisanPackUI\Privacy\Livewire\Admin\DataRequestManager;
 use ArtisanPackUI\Privacy\Livewire\ConsentPreferences;
@@ -46,6 +51,8 @@ use ArtisanPackUI\Privacy\Regulations\Ccpa;
 use ArtisanPackUI\Privacy\Regulations\Gdpr;
 use ArtisanPackUI\Privacy\Regulations\RegulationRegistry;
 use ArtisanPackUI\Privacy\Services\AnonymizationService;
+use ArtisanPackUI\Privacy\Services\BreachNotificationService;
+use ArtisanPackUI\Privacy\Services\ComplianceReportService;
 use ArtisanPackUI\Privacy\Services\ConsentService;
 use ArtisanPackUI\Privacy\Services\DataDeletionService;
 use ArtisanPackUI\Privacy\Services\DataExportService;
@@ -137,6 +144,12 @@ class PrivacyServiceProvider extends ServiceProvider
 		$this->app->singleton( AnonymizationService::class, fn () => new AnonymizationService() );
 		$this->app->alias( AnonymizationService::class, 'privacy.anonymization' );
 
+		$this->app->singleton( BreachNotificationService::class, fn () => new BreachNotificationService() );
+		$this->app->alias( BreachNotificationService::class, 'privacy.breach' );
+
+		$this->app->singleton( ComplianceReportService::class, fn () => new ComplianceReportService() );
+		$this->app->alias( ComplianceReportService::class, 'privacy.compliance' );
+
 		$this->app->singleton( DataExportService::class, fn () => new DataExportService() );
 		$this->app->alias( DataExportService::class, 'privacy.export' );
 
@@ -194,12 +207,66 @@ class PrivacyServiceProvider extends ServiceProvider
 		$this->registerLivewireComponents();
 		$this->registerApiRoutes();
 		$this->registerWebRoutes();
+		$this->registerAdminWebRoutes();
+		$this->registerBreachTemplatePublishing();
 		$this->registerBladeDirectives();
 		$this->registerMiddlewareAliases();
 		$this->registerRateLimiters();
 		$this->registerViewComposers();
 		$this->registerConsoleCommands();
 		$this->registerScheduledTasks();
+	}
+
+	/**
+	 * Registers the package's admin web routes (Livewire panel mount
+	 * points) under the configured `admin.route_prefix` with the
+	 * `admin.middleware` stack. Skips registration when the admin
+	 * dashboard is disabled via `artisanpack.privacy.admin.enabled`.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @return void
+	 */
+	protected function registerAdminWebRoutes(): void
+	{
+		if ( true !== (bool) config( 'artisanpack.privacy.admin.enabled', true ) ) {
+			return;
+		}
+
+		Route::group( [
+			'prefix'     => (string) config( 'artisanpack.privacy.admin.route_prefix', 'admin/privacy' ),
+			'middleware' => (array) config( 'artisanpack.privacy.admin.middleware', [ 'web', 'auth' ] ),
+		], function (): void {
+			$this->loadRoutesFrom( __DIR__ . '/../routes/admin.php' );
+		} );
+	}
+
+	/**
+	 * Registers the publishable breach-notification template stubs so
+	 * applications can override the authority and user notification
+	 * markdown via `php artisan vendor:publish --tag=privacy-breach-templates`.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @return void
+	 */
+	protected function registerBreachTemplatePublishing(): void
+	{
+		$templates = __DIR__ . '/../resources/views/breach-templates';
+
+		if ( is_dir( $templates ) ) {
+			$this->publishes( [
+				$templates => resource_path( 'views/vendor/artisanpack-ui/privacy/breach-templates' ),
+			], 'privacy-breach-templates' );
+		}
+
+		$adminLayout = __DIR__ . '/../resources/views/admin/layout.blade.php';
+
+		if ( is_file( $adminLayout ) ) {
+			$this->publishes( [
+				$adminLayout => resource_path( 'views/vendor/artisanpack-ui/privacy/admin/layout.blade.php' ),
+			], 'privacy-admin-layout' );
+		}
 	}
 
 	/**
@@ -253,6 +320,18 @@ class PrivacyServiceProvider extends ServiceProvider
 				(int) $apiHits,
 			)->by( null !== $key ? "user:{$key}" : ( $request->ip() ?: 'anon' ) );
 		} );
+
+		$adminRule                    = (string) config( 'artisanpack.privacy.admin.api_rate_limit', '120,1' );
+		[ $adminHits, $adminMinutes ] = array_pad( explode( ',', $adminRule ), 2, '1' );
+
+		RateLimiter::for( 'privacy-admin-api', static function ( $request ) use ( $adminHits, $adminMinutes ) {
+			$key = $request->user()?->getAuthIdentifier();
+
+			return Limit::perMinutes(
+				(int) $adminMinutes,
+				(int) $adminHits,
+			)->by( null !== $key ? "user:{$key}" : ( $request->ip() ?: 'anon' ) );
+		} );
 	}
 
 	/**
@@ -297,6 +376,7 @@ class PrivacyServiceProvider extends ServiceProvider
 		$this->commands( [
 			PurgeExpiredConsents::class,
 			PrivacyScan::class,
+			PrivacyInstall::class,
 		] );
 	}
 
@@ -476,5 +556,9 @@ class PrivacyServiceProvider extends ServiceProvider
 		\Livewire\Livewire::component( 'privacy-dashboard', PrivacyDashboard::class );
 		\Livewire\Livewire::component( 'privacy-admin-consent-manager', ConsentManager::class );
 		\Livewire\Livewire::component( 'privacy-admin-data-request-manager', DataRequestManager::class );
+		\Livewire\Livewire::component( 'privacy-admin-compliance-report', ComplianceReport::class );
+		\Livewire\Livewire::component( 'privacy-admin-breach-manager', BreachManager::class );
+		\Livewire\Livewire::component( 'privacy-admin-breach-detail', BreachDetail::class );
+		\Livewire\Livewire::component( 'privacy-admin-breach-report-form', BreachReportForm::class );
 	}
 }

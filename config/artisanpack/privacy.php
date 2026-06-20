@@ -434,10 +434,41 @@ return [
 	|
 	*/
 	'admin' => [
-		'enabled'      => true,
-		'route_prefix' => 'admin/privacy',
-		'middleware'   => [ 'web', 'auth' ],
-		'gate'         => 'manage-privacy',
+		'enabled'        => true,
+		'route_prefix'   => 'admin/privacy',
+		'middleware'     => [ 'web', 'auth' ],
+		'gate'           => 'manage-privacy',
+		/*
+		| Rate limit applied to every admin JSON API endpoint under the
+		| `api/privacy/admin` prefix. Format: `requests,minutes`.
+		*/
+		'api_rate_limit' => env( 'PRIVACY_ADMIN_API_RATE_LIMIT', '120,1' ),
+	],
+
+	/*
+	|--------------------------------------------------------------------------
+	| Breach Notification
+	|--------------------------------------------------------------------------
+	|
+	| Configures the authority notification recipient and the organization
+	| metadata interpolated into the publishable breach notification
+	| templates. Per-regulation notification windows (e.g. GDPR's 72 hours)
+	| are configured under `regulations.{key}.breach_notification_hours`.
+	|
+	*/
+	'breach' => [
+		'authority_email' => env( 'PRIVACY_BREACH_AUTHORITY_EMAIL' ),
+		'organization'    => [
+			'name'    => env( 'PRIVACY_BREACH_ORG_NAME', env( 'APP_NAME', 'Our organization' ) ),
+			'address' => env( 'PRIVACY_BREACH_ORG_ADDRESS' ),
+			'website' => env( 'PRIVACY_BREACH_ORG_WEBSITE', env( 'APP_URL' ) ),
+			'contact' => env( 'PRIVACY_BREACH_ORG_CONTACT' ),
+		],
+		'dpo' => [
+			'name'  => env( 'PRIVACY_BREACH_DPO_NAME' ),
+			'email' => env( 'PRIVACY_BREACH_DPO_EMAIL' ),
+			'phone' => env( 'PRIVACY_BREACH_DPO_PHONE' ),
+		],
 	],
 
 ];

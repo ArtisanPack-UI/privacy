@@ -15,3 +15,19 @@ export type {
 	AdminDataRequestPayload,
 	AdminDataRequestRow,
 } from './DataRequestManager.vue';
+export { default as ComplianceReport } from './ComplianceReport.vue';
+export type {
+	ComplianceBreachStats,
+	ComplianceConsentStats,
+	ComplianceReportPayload,
+	ComplianceReportResponse,
+	ComplianceRequestStats,
+} from './ComplianceReport.vue';
+export { default as BreachManager } from './BreachManager.vue';
+export type {
+	AdminBreachPayload,
+	AdminBreachRow,
+} from './BreachManager.vue';
+export { default as BreachReportForm } from './BreachReportForm.vue';
+export { default as BreachDetail } from './BreachDetail.vue';
+export type { AdminBreachDetailPayload } from './BreachDetail.vue';
