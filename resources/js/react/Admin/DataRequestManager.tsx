@@ -9,7 +9,7 @@
  * @since 1.0.0
  */
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 export interface AdminDataRequestRow {
 	id: number;
@@ -129,7 +129,11 @@ export function DataRequestManager( props: DataRequestManagerProps ): JSX.Elemen
 	const [ note, setNote ] = useState( '' );
 	const [ acting, setActing ] = useState<ActionKey | null>( null );
 
+	const loadSequence = useRef( 0 );
+	const detailsSequence = useRef( 0 );
+
 	const load = useCallback( async (): Promise<void> => {
+		const sequence = ++loadSequence.current;
 		setLoading( true );
 		setError( null );
 		try {
@@ -145,11 +149,17 @@ export function DataRequestManager( props: DataRequestManagerProps ): JSX.Elemen
 			if ( ! response.ok ) {
 				throw new Error( `Failed to load requests (${ response.status })` );
 			}
-			setPayload( ( await response.json() ) as AdminDataRequestPayload );
+			if ( sequence === loadSequence.current ) {
+				setPayload( ( await response.json() ) as AdminDataRequestPayload );
+			}
 		} catch ( err ) {
-			setError( err instanceof Error ? err.message : String( err ) );
+			if ( sequence === loadSequence.current ) {
+				setError( err instanceof Error ? err.message : String( err ) );
+			}
 		} finally {
-			setLoading( false );
+			if ( sequence === loadSequence.current ) {
+				setLoading( false );
+			}
 		}
 	}, [ endpoint, fetcher, filters, page, perPage ] );
 
@@ -164,6 +174,7 @@ export function DataRequestManager( props: DataRequestManagerProps ): JSX.Elemen
 
 	const openDetails = useCallback(
 		async ( id: number ): Promise<void> => {
+			const sequence = ++detailsSequence.current;
 			try {
 				const response = await fetcher( `${ endpoint.replace( /\/+$/, '' ) }/${ id }`, {
 					method: 'GET',
@@ -177,10 +188,14 @@ export function DataRequestManager( props: DataRequestManagerProps ): JSX.Elemen
 					throw new Error( `Failed to load request (${ response.status })` );
 				}
 				const json = ( await response.json() ) as { data: AdminDataRequestDetails };
-				setDetails( json.data );
-				setNote( '' );
+				if ( sequence === detailsSequence.current ) {
+					setDetails( json.data );
+					setNote( '' );
+				}
 			} catch ( err ) {
-				setError( err instanceof Error ? err.message : String( err ) );
+				if ( sequence === detailsSequence.current ) {
+					setError( err instanceof Error ? err.message : String( err ) );
+				}
 			}
 		},
 		[ endpoint, fetcher ],

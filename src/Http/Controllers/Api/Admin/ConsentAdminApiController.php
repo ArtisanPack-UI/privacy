@@ -96,6 +96,10 @@ class ConsentAdminApiController extends Controller
 	/**
 	 * Run the gate check (extracted so it can be reused / mocked).
 	 *
+	 * Always authorizes — an empty `admin.gate` config falls back to the
+	 * `manage-privacy` default rather than bypassing auth, so a missing or
+	 * blanked-out config cannot inadvertently expose the admin endpoints.
+	 *
 	 * @since 1.0.0
 	 *
 	 * @return void
@@ -105,7 +109,7 @@ class ConsentAdminApiController extends Controller
 		$gate = (string) config( 'artisanpack.privacy.admin.gate', 'manage-privacy' );
 
 		if ( '' === $gate ) {
-			return;
+			$gate = 'manage-privacy';
 		}
 
 		Gate::authorize( $gate );

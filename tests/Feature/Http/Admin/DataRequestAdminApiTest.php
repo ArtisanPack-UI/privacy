@@ -132,3 +132,63 @@ it( 'validates the action body', function (): void {
 		'action' => 'not-valid',
 	] )->assertUnprocessable();
 } );
+
+it( 'returns 422 when verifying an already-verified request', function (): void {
+	$request = makeAdminDataRequest( [
+		'verified_at' => now()->subDay(),
+		'status'      => DataRequest::STATUS_PROCESSING,
+	] );
+
+	$this->postJson( "/api/privacy/admin/data-requests/{$request->id}/actions", [
+		'action' => 'verify',
+	] )
+		->assertOk();
+
+	expect( $request->fresh()->verified_at )->not->toBeNull();
+} );
+
+it( 'rejects approve attempts against a completed request', function (): void {
+	$request = makeAdminDataRequest( [
+		'status'       => DataRequest::STATUS_COMPLETED,
+		'verified_at'  => now()->subDays( 2 ),
+		'completed_at' => now()->subDay(),
+	] );
+
+	$response = $this->postJson( "/api/privacy/admin/data-requests/{$request->id}/actions", [
+		'action' => 'approve',
+	] );
+
+	$response->assertOk();
+	$response->assertJsonPath( 'data.status', DataRequest::STATUS_COMPLETED );
+
+	expect( $request->fresh()->status )->toBe( DataRequest::STATUS_COMPLETED );
+} );
+
+it( 'rejects reject attempts against an already-rejected request', function (): void {
+	$request = makeAdminDataRequest( [
+		'status'      => DataRequest::STATUS_REJECTED,
+		'admin_notes' => 'original rejection',
+	] );
+
+	$this->postJson( "/api/privacy/admin/data-requests/{$request->id}/actions", [
+		'action' => 'reject',
+		'note'   => 'second reject',
+	] )->assertOk();
+
+	$fresh = $request->fresh();
+	expect( $fresh->status )->toBe( DataRequest::STATUS_REJECTED );
+	expect( (string) $fresh->admin_notes )->not->toContain( 'second reject' );
+} );
+
+it( 'fails verify when the request is past its TTL', function (): void {
+	config()->set( 'artisanpack.privacy.verification.token_ttl_minutes', 1 );
+
+	$request = makeAdminDataRequest();
+	$request->forceFill( [ 'created_at' => now()->subHours( 2 ) ] )->save();
+
+	$this->postJson( "/api/privacy/admin/data-requests/{$request->id}/actions", [
+		'action' => 'verify',
+	] )->assertStatus( 422 );
+
+	expect( $request->fresh()->verified_at )->toBeNull();
+} );

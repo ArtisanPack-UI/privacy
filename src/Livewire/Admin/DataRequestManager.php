@@ -27,6 +27,7 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Url;
@@ -106,9 +107,11 @@ class DataRequestManager extends Component
 	{
 		$gate = (string) config( 'artisanpack.privacy.admin.gate', 'manage-privacy' );
 
-		if ( '' !== $gate ) {
-			Gate::authorize( $gate );
+		if ( '' === $gate ) {
+			$gate = 'manage-privacy';
 		}
+
+		Gate::authorize( $gate );
 	}
 
 	/**
@@ -237,29 +240,43 @@ class DataRequestManager extends Component
 	 */
 	public function approve( int $id ): void
 	{
-		$request = DataRequest::query()->find( $id );
+		$note    = $this->note;
+		$result  = DB::transaction( function () use ( $id, $note ) {
+			$request = DataRequest::query()->lockForUpdate()->find( $id );
 
-		if ( null === $request ) {
-			return;
+			if ( null === $request ) {
+				return null;
+			}
+
+			if ( DataRequest::STATUS_PENDING !== $request->status && DataRequest::STATUS_PROCESSING !== $request->status ) {
+				return null;
+			}
+
+			if ( null === $request->verified_at ) {
+				$confirmed = app( VerificationService::class )
+					->confirm( $request, 'manual', $this->actorId() );
+
+				if ( ! $confirmed ) {
+					return null;
+				}
+
+				$request->refresh();
+			}
+
+			$request->forceFill( [
+				'status'       => DataRequest::STATUS_PROCESSING,
+				'processed_by' => $this->actorId(),
+			] )->save();
+
+			$this->logAction( $request, 'approved', $note );
+
+			return $request;
+		} );
+
+		if ( $result instanceof DataRequest ) {
+			$this->dispatch( 'privacy:data-request-processed', id: $result->id, status: $result->status );
+			$this->note = '';
 		}
-
-		if ( DataRequest::STATUS_PENDING !== $request->status && DataRequest::STATUS_PROCESSING !== $request->status ) {
-			return;
-		}
-
-		if ( null === $request->verified_at ) {
-			app( VerificationService::class )->confirm( $request, 'manual', $this->actorId() );
-			$request->refresh();
-		}
-
-		$request->forceFill( [
-			'status'       => DataRequest::STATUS_PROCESSING,
-			'processed_by' => $this->actorId(),
-		] )->save();
-
-		$this->logAction( $request, 'approved', $this->note );
-		$this->dispatch( 'privacy:data-request-processed', id: $request->id, status: $request->status );
-		$this->note = '';
 	}
 
 	/**
@@ -273,25 +290,33 @@ class DataRequestManager extends Component
 	 */
 	public function reject( int $id ): void
 	{
-		$request = DataRequest::query()->find( $id );
+		$note   = $this->note;
+		$result = DB::transaction( function () use ( $id, $note ) {
+			$request = DataRequest::query()->lockForUpdate()->find( $id );
 
-		if ( null === $request ) {
-			return;
+			if ( null === $request ) {
+				return null;
+			}
+
+			if ( DataRequest::STATUS_COMPLETED === $request->status || DataRequest::STATUS_REJECTED === $request->status ) {
+				return null;
+			}
+
+			$request->forceFill( [
+				'status'       => DataRequest::STATUS_REJECTED,
+				'processed_by' => $this->actorId(),
+				'admin_notes'  => $this->mergeNote( $request, $note ),
+			] )->save();
+
+			$this->logAction( $request, 'rejected', $note );
+
+			return $request;
+		} );
+
+		if ( $result instanceof DataRequest ) {
+			$this->dispatch( 'privacy:data-request-processed', id: $result->id, status: $result->status );
+			$this->note = '';
 		}
-
-		if ( DataRequest::STATUS_COMPLETED === $request->status || DataRequest::STATUS_REJECTED === $request->status ) {
-			return;
-		}
-
-		$request->forceFill( [
-			'status'       => DataRequest::STATUS_REJECTED,
-			'processed_by' => $this->actorId(),
-			'admin_notes'  => $this->mergeNote( $request, $this->note ),
-		] )->save();
-
-		$this->logAction( $request, 'rejected', $this->note );
-		$this->dispatch( 'privacy:data-request-processed', id: $request->id, status: $request->status );
-		$this->note = '';
 	}
 
 	/**
@@ -305,26 +330,34 @@ class DataRequestManager extends Component
 	 */
 	public function complete( int $id ): void
 	{
-		$request = DataRequest::query()->find( $id );
+		$note   = $this->note;
+		$result = DB::transaction( function () use ( $id, $note ) {
+			$request = DataRequest::query()->lockForUpdate()->find( $id );
 
-		if ( null === $request ) {
-			return;
+			if ( null === $request ) {
+				return null;
+			}
+
+			if ( DataRequest::STATUS_COMPLETED === $request->status || DataRequest::STATUS_REJECTED === $request->status ) {
+				return null;
+			}
+
+			$request->forceFill( [
+				'status'       => DataRequest::STATUS_COMPLETED,
+				'completed_at' => now(),
+				'processed_by' => $this->actorId(),
+				'admin_notes'  => $this->mergeNote( $request, $note ),
+			] )->save();
+
+			$this->logAction( $request, 'completed', $note );
+
+			return $request;
+		} );
+
+		if ( $result instanceof DataRequest ) {
+			$this->dispatch( 'privacy:data-request-processed', id: $result->id, status: $result->status );
+			$this->note = '';
 		}
-
-		if ( DataRequest::STATUS_COMPLETED === $request->status || DataRequest::STATUS_REJECTED === $request->status ) {
-			return;
-		}
-
-		$request->forceFill( [
-			'status'       => DataRequest::STATUS_COMPLETED,
-			'completed_at' => now(),
-			'processed_by' => $this->actorId(),
-			'admin_notes'  => $this->mergeNote( $request, $this->note ),
-		] )->save();
-
-		$this->logAction( $request, 'completed', $this->note );
-		$this->dispatch( 'privacy:data-request-processed', id: $request->id, status: $request->status );
-		$this->note = '';
 	}
 
 	/**
@@ -338,20 +371,33 @@ class DataRequestManager extends Component
 	 */
 	public function verifyManually( int $id ): void
 	{
-		$request = DataRequest::query()->find( $id );
+		$note      = $this->note;
+		$verified  = DB::transaction( function () use ( $id, $note ) {
+			$request = DataRequest::query()->lockForUpdate()->find( $id );
 
-		if ( null === $request ) {
-			return;
+			if ( null === $request ) {
+				return false;
+			}
+
+			if ( null !== $request->verified_at ) {
+				return false;
+			}
+
+			$confirmed = app( VerificationService::class )
+				->confirm( $request, 'manual', $this->actorId() );
+
+			if ( ! $confirmed ) {
+				return false;
+			}
+
+			$this->logAction( $request->refresh(), 'verified', $note );
+
+			return true;
+		} );
+
+		if ( $verified ) {
+			$this->note = '';
 		}
-
-		if ( null !== $request->verified_at ) {
-			return;
-		}
-
-		app( VerificationService::class )->confirm( $request, 'manual', $this->actorId() );
-
-		$this->logAction( $request->refresh(), 'verified', $this->note );
-		$this->note = '';
 	}
 
 	/**

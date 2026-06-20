@@ -83,6 +83,9 @@ const details = ref<AdminDataRequestDetails | null>( null );
 const note = ref( '' );
 const acting = ref<ActionKey | null>( null );
 
+let loadSequence = 0;
+let detailsSequence = 0;
+
 function fetcher(): typeof fetch {
 	if ( props.fetchImpl ) {
 		return props.fetchImpl;
@@ -110,6 +113,7 @@ function buildQuery(): string {
 }
 
 async function load(): Promise<void> {
+	const sequence = ++loadSequence;
 	loading.value = true;
 	error.value = null;
 	try {
@@ -124,15 +128,22 @@ async function load(): Promise<void> {
 		if ( ! response.ok ) {
 			throw new Error( `Failed to load requests (${ response.status })` );
 		}
-		payload.value = ( await response.json() ) as AdminDataRequestPayload;
+		if ( sequence === loadSequence ) {
+			payload.value = ( await response.json() ) as AdminDataRequestPayload;
+		}
 	} catch ( err ) {
-		error.value = err instanceof Error ? err.message : String( err );
+		if ( sequence === loadSequence ) {
+			error.value = err instanceof Error ? err.message : String( err );
+		}
 	} finally {
-		loading.value = false;
+		if ( sequence === loadSequence ) {
+			loading.value = false;
+		}
 	}
 }
 
 async function openDetails( id: number ): Promise<void> {
+	const sequence = ++detailsSequence;
 	try {
 		const response = await fetcher()(
 			`${ props.endpoint.replace( /\/+$/, '' ) }/${ id }`,
@@ -146,10 +157,14 @@ async function openDetails( id: number ): Promise<void> {
 			throw new Error( `Failed to load request (${ response.status })` );
 		}
 		const json = ( await response.json() ) as { data: AdminDataRequestDetails };
-		details.value = json.data;
-		note.value = '';
+		if ( sequence === detailsSequence ) {
+			details.value = json.data;
+			note.value = '';
+		}
 	} catch ( err ) {
-		error.value = err instanceof Error ? err.message : String( err );
+		if ( sequence === detailsSequence ) {
+			error.value = err instanceof Error ? err.message : String( err );
+		}
 	}
 }
 

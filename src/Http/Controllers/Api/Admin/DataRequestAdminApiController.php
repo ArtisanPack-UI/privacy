@@ -26,6 +26,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 
 /**
@@ -142,60 +143,103 @@ class DataRequestAdminApiController extends Controller
 			'note'   => 'sometimes|nullable|string|max:2000',
 		] );
 
-		$row = DataRequest::query()->find( $id );
+		$note = trim( (string) ( $validated['note'] ?? '' ) );
 
-		if ( null === $row ) {
+		$result = DB::transaction( function () use ( $validated, $id, $note ) {
+			$row = DataRequest::query()->lockForUpdate()->find( $id );
+
+			if ( null === $row ) {
+				return null;
+			}
+
+			$terminal = [ DataRequest::STATUS_COMPLETED, DataRequest::STATUS_REJECTED ];
+
+			switch ( $validated['action'] ) {
+				case self::ACTION_VERIFY:
+					if ( null === $row->verified_at ) {
+						$confirmed = app( VerificationService::class )
+							->confirm( $row, 'manual', $this->actorId() );
+
+						if ( ! $confirmed ) {
+							return [ 'status' => 422, 'message' => 'Request could not be verified.' ];
+						}
+
+						$row->refresh();
+					}
+					$this->logAction( $row, 'verified', $note );
+					break;
+
+				case self::ACTION_APPROVE:
+					if ( in_array( $row->status, $terminal, true ) ) {
+						break;
+					}
+
+					if ( null === $row->verified_at ) {
+						$confirmed = app( VerificationService::class )
+							->confirm( $row, 'manual', $this->actorId() );
+
+						if ( ! $confirmed ) {
+							return [ 'status' => 422, 'message' => 'Request could not be verified.' ];
+						}
+
+						$row->refresh();
+					}
+
+					$row->forceFill( [
+						'status'       => DataRequest::STATUS_PROCESSING,
+						'processed_by' => $this->actorId(),
+					] )->save();
+					$this->logAction( $row, 'approved', $note );
+					break;
+
+				case self::ACTION_REJECT:
+					if ( in_array( $row->status, $terminal, true ) ) {
+						break;
+					}
+
+					$row->forceFill( [
+						'status'       => DataRequest::STATUS_REJECTED,
+						'processed_by' => $this->actorId(),
+						'admin_notes'  => $this->mergeNote( $row, $note ),
+					] )->save();
+					$this->logAction( $row, 'rejected', $note );
+					break;
+
+				case self::ACTION_COMPLETE:
+					if ( in_array( $row->status, $terminal, true ) ) {
+						break;
+					}
+
+					$row->forceFill( [
+						'status'       => DataRequest::STATUS_COMPLETED,
+						'completed_at' => now(),
+						'processed_by' => $this->actorId(),
+						'admin_notes'  => $this->mergeNote( $row, $note ),
+					] )->save();
+					$this->logAction( $row, 'completed', $note );
+					break;
+			}
+
+			return [ 'status' => 200 ];
+		} );
+
+		if ( null === $result ) {
 			return response()->json( [ 'message' => 'Not found' ], 404 );
 		}
 
-		$note = trim( (string) ( $validated['note'] ?? '' ) );
-
-		switch ( $validated['action'] ) {
-			case self::ACTION_VERIFY:
-				if ( null === $row->verified_at ) {
-					app( VerificationService::class )->confirm( $row, 'manual', $this->actorId() );
-				}
-				$this->logAction( $row->refresh(), 'verified', $note );
-				break;
-
-			case self::ACTION_APPROVE:
-				if ( null === $row->verified_at ) {
-					app( VerificationService::class )->confirm( $row, 'manual', $this->actorId() );
-					$row->refresh();
-				}
-
-				$row->forceFill( [
-					'status'       => DataRequest::STATUS_PROCESSING,
-					'processed_by' => $this->actorId(),
-				] )->save();
-				$this->logAction( $row, 'approved', $note );
-				break;
-
-			case self::ACTION_REJECT:
-				$row->forceFill( [
-					'status'       => DataRequest::STATUS_REJECTED,
-					'processed_by' => $this->actorId(),
-					'admin_notes'  => $this->mergeNote( $row, $note ),
-				] )->save();
-				$this->logAction( $row, 'rejected', $note );
-				break;
-
-			case self::ACTION_COMPLETE:
-				$row->forceFill( [
-					'status'       => DataRequest::STATUS_COMPLETED,
-					'completed_at' => now(),
-					'processed_by' => $this->actorId(),
-					'admin_notes'  => $this->mergeNote( $row, $note ),
-				] )->save();
-				$this->logAction( $row, 'completed', $note );
-				break;
+		if ( 200 !== ( $result['status'] ?? 200 ) ) {
+			return response()->json(
+				[ 'message' => $result['message'] ?? 'Action failed.' ],
+				(int) $result['status'],
+			);
 		}
 
 		return $this->show( $id );
 	}
 
 	/**
-	 * Run the gate check.
+	 * Run the gate check. Always authorizes — see
+	 * {@see ConsentAdminApiController::authorize()} for the rationale.
 	 *
 	 * @since 1.0.0
 	 *
@@ -206,7 +250,7 @@ class DataRequestAdminApiController extends Controller
 		$gate = (string) config( 'artisanpack.privacy.admin.gate', 'manage-privacy' );
 
 		if ( '' === $gate ) {
-			return;
+			$gate = 'manage-privacy';
 		}
 
 		Gate::authorize( $gate );

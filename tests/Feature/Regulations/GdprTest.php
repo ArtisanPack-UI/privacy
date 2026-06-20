@@ -49,6 +49,7 @@ it( 'lists every GDPR data subject right', function (): void {
 	expect( $rights )->toContain( 'restriction' );
 	expect( $rights )->toContain( 'objection' );
 	expect( $rights )->toContain( 'automated_decision_making' );
+	expect( $rights )->toContain( 'be_informed' );
 } );
 
 it( 'returns the 72 hour breach notification window', function (): void {

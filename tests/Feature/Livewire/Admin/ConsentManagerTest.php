@@ -112,7 +112,12 @@ it( 'exports filtered consents as JSON', function (): void {
 		->set( 'categoryFilter', 'analytics' );
 
 	$response = $component->instance()->exportJson();
-	$payload  = json_decode( $response->getContent(), true );
+
+	ob_start();
+	$response->sendContent();
+	$contents = ob_get_clean();
+
+	$payload = json_decode( $contents, true );
 
 	expect( $payload )->toBeArray();
 	expect( $payload )->toHaveCount( 1 );

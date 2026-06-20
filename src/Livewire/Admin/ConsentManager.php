@@ -23,7 +23,6 @@ namespace ArtisanPackUI\Privacy\Livewire\Admin;
 use ArtisanPackUI\Privacy\Models\Consent;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Http\Response;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Gate;
@@ -31,6 +30,7 @@ use Livewire\Attributes\Computed;
 use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithPagination;
+use RuntimeException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
@@ -124,9 +124,11 @@ class ConsentManager extends Component
 	{
 		$gate = (string) config( 'artisanpack.privacy.admin.gate', 'manage-privacy' );
 
-		if ( '' !== $gate ) {
-			Gate::authorize( $gate );
+		if ( '' === $gate ) {
+			$gate = 'manage-privacy';
 		}
+
+		Gate::authorize( $gate );
 	}
 
 	/**
@@ -305,40 +307,57 @@ class ConsentManager extends Component
 	}
 
 	/**
-	 * Return the filtered consent audit log as a JSON download.
+	 * Stream the filtered consent audit log as a JSON download. Chunked at
+	 * 500 rows like the CSV export so memory stays flat on large datasets;
+	 * each row is encoded individually so a single malformed value cannot
+	 * silently truncate the entire response.
 	 *
 	 * @since 1.0.0
 	 *
-	 * @return Response
+	 * @return StreamedResponse
 	 */
-	public function exportJson(): Response
+	public function exportJson(): StreamedResponse
 	{
-		$rows = $this->query()
-			->orderByDesc( 'created_at' )
-			->get()
-			->map( static fn ( Consent $row ): array => [
-				'id'                => $row->id,
-				'consentable_type'  => $row->consentable_type,
-				'consentable_id'    => $row->consentable_id,
-				'category'          => $row->category,
-				'granted'           => $row->granted,
-				'regulation'        => $row->regulation,
-				'ip_address'        => $row->ip_address,
-				'metadata'          => $row->metadata,
-				'created_at'        => optional( $row->created_at )->toIso8601String(),
-				'expires_at'        => optional( $row->expires_at )->toIso8601String(),
-				'withdrawn_at'      => optional( $row->withdrawn_at )->toIso8601String(),
-			] )
-			->all();
+		$filename = 'privacy-consents-' . now()->format( 'Ymd-His' ) . '.json';
+		$query    = $this->query()->orderByDesc( 'created_at' );
 
-		return response(
-			(string) json_encode( $rows, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ),
-			200,
-			[
-				'Content-Type'        => 'application/json',
-				'Content-Disposition' => 'attachment; filename="privacy-consents-' . now()->format( 'Ymd-His' ) . '.json"',
-			],
-		);
+		return response()->streamDownload( static function () use ( $query ): void {
+			$out = fopen( 'php://output', 'wb' );
+			fwrite( $out, '[' );
+			$first = true;
+
+			$query->chunk( 500, static function ( $rows ) use ( $out, &$first ): void {
+				foreach ( $rows as $row ) {
+					$payload = [
+						'id'                => $row->id,
+						'consentable_type'  => $row->consentable_type,
+						'consentable_id'    => $row->consentable_id,
+						'category'          => $row->category,
+						'granted'           => $row->granted,
+						'regulation'        => $row->regulation,
+						'ip_address'        => $row->ip_address,
+						'metadata'          => $row->metadata,
+						'created_at'        => optional( $row->created_at )->toIso8601String(),
+						'expires_at'        => optional( $row->expires_at )->toIso8601String(),
+						'withdrawn_at'      => optional( $row->withdrawn_at )->toIso8601String(),
+					];
+
+					$encoded = json_encode( $payload, JSON_UNESCAPED_SLASHES );
+
+					if ( false === $encoded ) {
+						throw new RuntimeException(
+							'Failed to encode consent row #' . $row->id . ': ' . json_last_error_msg(),
+						);
+					}
+
+					fwrite( $out, ( $first ? '' : ',' ) . $encoded );
+					$first = false;
+				}
+			} );
+
+			fwrite( $out, ']' );
+			fclose( $out );
+		}, $filename, [ 'Content-Type' => 'application/json' ] );
 	}
 
 	/**

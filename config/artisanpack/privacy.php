@@ -316,6 +316,28 @@ return [
 		'maxmind' => [
 			'database' => env( 'PRIVACY_MAXMIND_DATABASE' ),
 		],
+
+		/*
+		| ip-api.com base URL. Defaults to the free HTTP endpoint because
+		| the free tier does not support HTTPS. Operators on the Pro plan
+		| should swap this to the Pro HTTPS endpoint
+		| (`https://pro.ip-api.com`) so geolocation traffic is encrypted.
+		*/
+		'ip_api' => [
+			'base_url' => env( 'PRIVACY_IP_API_BASE_URL', 'http://ip-api.com' ),
+		],
+
+		/*
+		| Cloudflare-specific settings used when `provider = cloudflare`.
+		| `trust_header` lets the service honour `CF-IPCountry` even on a
+		| stack without Laravel's TrustProxies middleware wired up — set
+		| this to true ONLY when you are certain the request can only
+		| reach the application through Cloudflare. Otherwise the service
+		| falls back to `Request::isFromTrustedProxy()`.
+		*/
+		'cloudflare' => [
+			'trust_header' => env( 'PRIVACY_CLOUDFLARE_TRUST_HEADER', false ),
+		],
 	],
 
 	/*

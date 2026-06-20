@@ -180,7 +180,7 @@ class GeoLocationService
 	 */
 	public function resolveRegion( Request $request ): ?string
 	{
-		if ( self::PROVIDER_CLOUDFLARE === $this->provider() ) {
+		if ( self::PROVIDER_CLOUDFLARE === $this->provider() && $this->trustsProxyHeaders( $request ) ) {
 			$header = $request->headers->get( 'CF-IPCountry' );
 
 			if ( is_string( $header ) && '' !== $header && 'XX' !== strtoupper( $header ) ) {
@@ -216,6 +216,29 @@ class GeoLocationService
 	protected function isEnabled(): bool
 	{
 		return (bool) config( 'artisanpack.privacy.geolocation.enabled', true );
+	}
+
+	/**
+	 * Returns true when the supplied request can be trusted to expose
+	 * proxy-injected headers like `CF-IPCountry`. Defers to Laravel's
+	 * trusted-proxy configuration when available and falls back to the
+	 * `geolocation.cloudflare.trust_header` config flag so applications
+	 * without a TrustProxies middleware can still opt in explicitly.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  Request  $request Incoming request.
+	 *
+	 * @return bool
+	 */
+	protected function trustsProxyHeaders( Request $request ): bool
+	{
+		if ( (bool) config( 'artisanpack.privacy.geolocation.cloudflare.trust_header', false ) ) {
+			return true;
+		}
+
+		return method_exists( $request, 'isFromTrustedProxy' )
+			&& $request->isFromTrustedProxy();
 	}
 
 	/**
@@ -293,6 +316,10 @@ class GeoLocationService
 	 * {@link https://ip-api.com/docs/api:json}. Honours the X-Ttl /
 	 * X-Rl headers by reporting connection errors instead of throwing.
 	 *
+	 * Defaults to the free HTTP endpoint because ip-api's free tier does
+	 * not support TLS — operators on the Pro plan should set
+	 * `geolocation.ip_api.base_url` to the HTTPS Pro endpoint.
+	 *
 	 * @since 1.0.0
 	 *
 	 * @param  string  $ip IP address.
@@ -301,8 +328,9 @@ class GeoLocationService
 	 */
 	protected function lookupIpApi( string $ip ): ?array
 	{
-		$http = $this->httpFactory ?? app( HttpFactory::class );
-		$url  = "http://ip-api.com/json/{$ip}?fields=status,countryCode,region";
+		$http    = $this->httpFactory ?? app( HttpFactory::class );
+		$baseUrl = rtrim( (string) config( 'artisanpack.privacy.geolocation.ip_api.base_url', 'http://ip-api.com' ), '/' );
+		$url     = "{$baseUrl}/json/{$ip}?fields=status,countryCode,region";
 
 		try {
 			$response = $http->timeout( 3 )->get( $url );

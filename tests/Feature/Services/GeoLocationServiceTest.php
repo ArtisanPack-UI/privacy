@@ -106,8 +106,9 @@ it( 'rejects invalid IP addresses without hitting the provider', function (): vo
 	Http::assertNothingSent();
 } );
 
-it( 'resolves the region from the cloudflare CF-IPCountry header', function (): void {
+it( 'resolves the region from the cloudflare CF-IPCountry header when the operator opts in', function (): void {
 	config()->set( 'artisanpack.privacy.geolocation.provider', 'cloudflare' );
+	config()->set( 'artisanpack.privacy.geolocation.cloudflare.trust_header', true );
 
 	$service = new GeoLocationService();
 	$request = Request::create( '/' );
@@ -116,8 +117,25 @@ it( 'resolves the region from the cloudflare CF-IPCountry header', function (): 
 	expect( $service->resolveRegion( $request ) )->toBe( 'DE' );
 } );
 
+it( 'ignores the CF-IPCountry header when the request is not from a trusted proxy', function (): void {
+	config()->set( 'artisanpack.privacy.geolocation.provider', 'cloudflare' );
+	config()->set( 'artisanpack.privacy.geolocation.cloudflare.trust_header', false );
+	config()->set( 'artisanpack.privacy.geolocation.fallback_region', null );
+
+	Http::fake( [
+		'ip-api.com/*' => Http::response( [ 'status' => 'fail' ] ),
+	] );
+
+	$service = new GeoLocationService();
+	$request = Request::create( '/' );
+	$request->headers->set( 'CF-IPCountry', 'DE' );
+
+	expect( $service->resolveRegion( $request ) )->toBeNull();
+} );
+
 it( 'ignores cloudflares XX placeholder', function (): void {
 	config()->set( 'artisanpack.privacy.geolocation.provider', 'cloudflare' );
+	config()->set( 'artisanpack.privacy.geolocation.cloudflare.trust_header', true );
 
 	$service = new GeoLocationService();
 	$request = Request::create( '/' );

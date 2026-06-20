@@ -8,7 +8,7 @@
  * @since 1.0.0
  */
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 export interface AdminConsentRow {
 	id: number;
@@ -166,8 +166,10 @@ export function ConsentManager( props: ConsentManagerProps ): JSX.Element {
 	const [ payload, setPayload ] = useState<AdminConsentPayload | null>( null );
 	const [ loading, setLoading ] = useState( false );
 	const [ error, setError ] = useState<string | null>( null );
+	const loadSequence = useRef( 0 );
 
 	const load = useCallback( async (): Promise<void> => {
+		const sequence = ++loadSequence.current;
 		setLoading( true );
 		setError( null );
 		try {
@@ -186,11 +188,17 @@ export function ConsentManager( props: ConsentManagerProps ): JSX.Element {
 				throw new Error( `Failed to load consents (${ response.status })` );
 			}
 			const json = ( await response.json() ) as AdminConsentPayload;
-			setPayload( json );
+			if ( sequence === loadSequence.current ) {
+				setPayload( json );
+			}
 		} catch ( err ) {
-			setError( err instanceof Error ? err.message : String( err ) );
+			if ( sequence === loadSequence.current ) {
+				setError( err instanceof Error ? err.message : String( err ) );
+			}
 		} finally {
-			setLoading( false );
+			if ( sequence === loadSequence.current ) {
+				setLoading( false );
+			}
 		}
 	}, [ csrfToken, endpoint, fetcher, filters, page, perPage ] );
 

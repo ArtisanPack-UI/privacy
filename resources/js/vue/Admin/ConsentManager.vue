@@ -62,6 +62,7 @@ const page = ref( 1 );
 const payload = ref<AdminConsentPayload | null>( null );
 const loading = ref( false );
 const error = ref<string | null>( null );
+let loadSequence = 0;
 
 function fetcher(): typeof fetch {
 	if ( props.fetchImpl ) {
@@ -96,6 +97,7 @@ function buildQuery(): string {
 }
 
 async function load(): Promise<void> {
+	const sequence = ++loadSequence;
 	loading.value = true;
 	error.value = null;
 	try {
@@ -111,11 +113,17 @@ async function load(): Promise<void> {
 		if ( ! response.ok ) {
 			throw new Error( `Failed to load consents (${ response.status })` );
 		}
-		payload.value = ( await response.json() ) as AdminConsentPayload;
+		if ( sequence === loadSequence ) {
+			payload.value = ( await response.json() ) as AdminConsentPayload;
+		}
 	} catch ( err ) {
-		error.value = err instanceof Error ? err.message : String( err );
+		if ( sequence === loadSequence ) {
+			error.value = err instanceof Error ? err.message : String( err );
+		}
 	} finally {
-		loading.value = false;
+		if ( sequence === loadSequence ) {
+			loading.value = false;
+		}
 	}
 }
 

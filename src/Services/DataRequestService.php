@@ -164,27 +164,61 @@ class DataRequestService
 			'regulation'         => $regulation,
 			'reason'             => $reason,
 			'verification_token' => Str::random( 40 ),
-			'due_at'             => $this->resolveDueDate( $regulation ),
+			'due_at'             => $this->resolveDueDate( $regulation, $type ),
 		] );
 	}
 
 	/**
 	 * Computes the response deadline from `data_requests.response_days`.
 	 *
+	 * The per-regulation config value may be either a scalar (one deadline
+	 * for every request type) or a per-type array — both are accepted so
+	 * regulations like CCPA can differentiate access vs. opt-out windows
+	 * without overriding the rest of the deadline map.
+	 *
 	 * @since 1.0.0
 	 *
-	 * @param  string|null  $regulation Regulation key or null.
+	 * @param  string|null  $regulation  Regulation key or null.
+	 * @param  string       $requestType Request type (`access`, `export`, …).
 	 *
 	 * @return Carbon|null
 	 */
-	protected function resolveDueDate( ?string $regulation ): ?Carbon
+	protected function resolveDueDate( ?string $regulation, string $requestType ): ?Carbon
 	{
-		$days = null !== $regulation
+		$configured = null !== $regulation
 			? config( "artisanpack.privacy.data_requests.response_days.{$regulation}" )
 			: null;
 
-		$days ??= config( 'artisanpack.privacy.data_requests.response_days.default' );
+		$days = $this->extractDays( $configured, $requestType );
 
-		return null === $days ? null : now()->addDays( (int) $days );
+		if ( null === $days ) {
+			$days = $this->extractDays(
+				config( 'artisanpack.privacy.data_requests.response_days.default' ),
+				$requestType,
+			);
+		}
+
+		return null === $days ? null : now()->addDays( $days );
+	}
+
+	/**
+	 * Extracts a per-type deadline from either a scalar or array config.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  mixed   $value       Raw config value.
+	 * @param  string  $requestType Request type key.
+	 *
+	 * @return int|null
+	 */
+	protected function extractDays( $value, string $requestType ): ?int
+	{
+		if ( is_array( $value ) ) {
+			$candidate = $value[ $requestType ] ?? $value['default'] ?? null;
+
+			return null === $candidate ? null : (int) $candidate;
+		}
+
+		return null === $value ? null : (int) $value;
 	}
 }

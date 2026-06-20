@@ -46,6 +46,7 @@ it( 'lists every CCPA/CPRA data subject right', function (): void {
 	expect( $rights )->toContain( Ccpa::RIGHT_TO_OPT_OUT_OF_SALE );
 	expect( $rights )->toContain( Ccpa::RIGHT_TO_LIMIT_SENSITIVE_USE );
 	expect( $rights )->toContain( Ccpa::RIGHT_TO_NON_DISCRIMINATION );
+	expect( $rights )->toContain( Ccpa::RIGHT_TO_DATA_PORTABILITY );
 } );
 
 it( 'returns the 45 day response deadline', function (): void {
