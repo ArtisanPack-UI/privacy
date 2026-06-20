@@ -18,13 +18,25 @@ export type { UseConsentOptions, UseConsentResult } from './useConsent';
 export {
 	ConsentManager as AdminConsentManager,
 	DataRequestManager as AdminDataRequestManager,
+	ComplianceReport as AdminComplianceReport,
+	BreachManager as AdminBreachManager,
+	BreachReportForm as AdminBreachReportForm,
+	BreachDetail as AdminBreachDetail,
 } from './Admin';
 export type {
+	AdminBreachDetailPayload,
+	AdminBreachPayload,
+	AdminBreachRow,
 	AdminConsentPayload,
 	AdminConsentRow,
 	AdminDataRequestDetails,
 	AdminDataRequestPayload,
 	AdminDataRequestRow,
+	ComplianceBreachStats,
+	ComplianceConsentStats,
+	ComplianceReportPayload,
+	ComplianceReportResponse,
+	ComplianceRequestStats,
 } from './Admin';
 export type {
 	ConsentMap,
