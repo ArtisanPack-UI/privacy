@@ -1,0 +1,102 @@
+/**
+ * ArtisanPack UI · Privacy — default CSS variable map.
+ *
+ * Override any of these variables in your application stylesheet (or in
+ * `:root[data-theme="dark"]` for dark mode) to retheme the cookie banner,
+ * re-consent banner, preferences modal, and policy display page without
+ * publishing the views.
+ *
+ * @since 1.0.0
+ */
+
+:root {
+	/* Layout */
+	--privacy-banner-radius: 0.5rem;
+	--privacy-banner-padding: 1.25rem;
+	--privacy-banner-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+
+	/* Banner — light */
+	--privacy-banner-bg: #ffffff;
+	--privacy-banner-text: #111827;
+	--privacy-banner-border: #e5e7eb;
+
+	/* Banner — accent (CTA) */
+	--privacy-banner-accent: #2563eb;
+	--privacy-banner-accent-text: #ffffff;
+
+	/* Re-consent banner */
+	--privacy-reconsent-bg: #fef3c7;
+	--privacy-reconsent-text: #111827;
+
+	/* Policy page */
+	--privacy-toc-bg: #f8fafc;
+	--privacy-toc-text: #1f2937;
+	--privacy-body-text: #111827;
+	--privacy-link: #1d4ed8;
+}
+
+:root[data-theme="dark"],
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme="light"]) {
+		--privacy-banner-bg: #1f2937;
+		--privacy-banner-text: #f9fafb;
+		--privacy-banner-border: #374151;
+		--privacy-reconsent-bg: #422006;
+		--privacy-reconsent-text: #f9fafb;
+		--privacy-toc-bg: #1f2937;
+		--privacy-toc-text: #f9fafb;
+		--privacy-body-text: #f3f4f6;
+		--privacy-link: #93c5fd;
+	}
+}
+
+/* Component scaffolding — only used when `ui.use_daisyui` is set to false. */
+.privacy-cookie-banner__inner,
+.privacy-reconsent-banner__inner {
+	background: var(--privacy-banner-bg);
+	color: var(--privacy-banner-text);
+	border-radius: var(--privacy-banner-radius);
+	box-shadow: var(--privacy-banner-shadow);
+	padding: var(--privacy-banner-padding);
+}
+
+.privacy-cookie-banner__btn,
+.privacy-reconsent-banner__btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0.5rem 1rem;
+	border-radius: calc(var(--privacy-banner-radius) / 2);
+	border: 1px solid var(--privacy-banner-border);
+	background: transparent;
+	color: inherit;
+	cursor: pointer;
+	font-weight: 500;
+}
+
+.privacy-cookie-banner__btn:hover,
+.privacy-reconsent-banner__btn:hover {
+	border-color: var(--privacy-banner-accent);
+	color: var(--privacy-banner-accent);
+}
+
+.privacy-cookie-banner__btn.btn-primary,
+.privacy-reconsent-banner__btn.btn-primary {
+	background: var(--privacy-banner-accent);
+	border-color: var(--privacy-banner-accent);
+	color: var(--privacy-banner-accent-text);
+}
+
+.privacy-cookie-banner__category {
+	border: 1px solid var(--privacy-banner-border);
+	border-radius: calc(var(--privacy-banner-radius) / 2);
+}
+
+.privacy-cookie-banner__badge {
+	display: inline-block;
+	padding: 0.125rem 0.5rem;
+	border-radius: 9999px;
+	background: var(--privacy-banner-border);
+	font-size: 0.75rem;
+	font-weight: 500;
+}

@@ -5,7 +5,9 @@ declare( strict_types=1 );
 namespace Tests;
 
 use ArtisanPackUI\Privacy\PrivacyServiceProvider;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Orchestra\Testbench\TestCase as BaseTestCase;
+use Tests\Support\TestSubject;
 
 /**
  * Base Test Case
@@ -22,6 +24,12 @@ abstract class TestCase extends BaseTestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        $this->loadMigrationsFrom( __DIR__ . '/../database/migrations' );
+
+        Relation::enforceMorphMap( [
+            'test_subject' => TestSubject::class,
+        ] );
     }
 
     /**
@@ -33,11 +41,17 @@ abstract class TestCase extends BaseTestCase
      *
      * @return array<int, class-string> Array of service provider class names.
      */
-    protected function getPrivacyProviders( $app ): array
+    protected function getPackageProviders( $app ): array
     {
-        return [
+        $providers = [
             PrivacyServiceProvider::class,
         ];
+
+        if ( class_exists( \Livewire\LivewireServiceProvider::class ) ) {
+            array_unshift( $providers, \Livewire\LivewireServiceProvider::class );
+        }
+
+        return $providers;
     }
 
     /**
