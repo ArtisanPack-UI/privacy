@@ -3,7 +3,7 @@
   "description": "Privacy and data protection toolkit for Laravel — consent management, data subject rights, and multi-regulation compliance (GDPR, CCPA, LGPD, PIPEDA).",
   "type": "library",
   "license": "MIT",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "autoload": {
     "psr-4": {
       "ArtisanPackUI\\Privacy\\": "src/",
@@ -30,7 +30,7 @@
     "illuminate/database": "^10.0|^11.0|^12.0|^13.0",
     "artisanpack-ui/core": "^1.0",
     "league/commonmark": "^2.4",
-    "livewire/livewire": "^3.5"
+    "livewire/livewire": "^3.5|^4.0"
   },
   "require-dev": {
     "pestphp/pest": "^3.8",

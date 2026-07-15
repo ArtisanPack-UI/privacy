@@ -114,4 +114,4 @@ For issues, feature requests, and contributions:
 
 ---
 
-*This documentation covers Privacy v1.0.0*
+*This documentation covers Privacy v1.0.1*

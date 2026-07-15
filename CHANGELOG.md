@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-07-14
+
+### Changed
+
+- Widen `livewire/livewire` constraint to `^3.5|^4.0` so the package installs alongside downstream apps that have already upgraded to Livewire v4. The `Livewire::component()` registration API used by `PrivacyServiceProvider` is compatible across both major versions. Applications embedding the package's Livewire components should still verify their own upgrade path — v4 introduces breaking changes to component internals.
+- Bump the `@artisanpack-ui/privacy` JS companion package to `1.0.1` so its version tracks the PHP package. No API changes; installers that pin the JS package to a specific version should update their pin.
+- Refresh the `docs/home.md` footer to reference v1.0.1.
+
 ## [1.0.0] - 2026-06-20
 
 ### Added
