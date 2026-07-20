@@ -4,6 +4,7 @@ declare( strict_types=1 );
 
 namespace Tests;
 
+use ArtisanPackUI\Hooks\Providers\HooksServiceProvider;
 use ArtisanPackUI\Privacy\PrivacyServiceProvider;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Orchestra\Testbench\TestCase as BaseTestCase;
@@ -44,6 +45,7 @@ abstract class TestCase extends BaseTestCase
     protected function getPackageProviders( $app ): array
     {
         $providers = [
+            HooksServiceProvider::class,
             PrivacyServiceProvider::class,
         ];
 

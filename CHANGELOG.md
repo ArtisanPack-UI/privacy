@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-20
+
+### Changed
+
+- Normalized all `privacy.*` hooks to `ap.privacy.*` camelCase per the cross-package hooks convention. 11 canonical hooks, 12 aliases registered (both `privacy.export.data` and `privacy.export-data` legacy spellings collapse to `ap.privacy.exportData`). Existing subscribers continue firing via `HookDeprecations` aliases — each emits an info-level log the first time it resolves per request. Alias removal deferred to next major.
+- Bumped `artisanpack-ui/hooks` to `^1.3`.
+
 ## [1.0.1] - 2026-07-14
 
 ### Changed

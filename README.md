@@ -135,6 +135,43 @@ composer test                                # full suite
 
 The package ships with 400+ Pest tests covering all services, models, Livewire components, Artisan commands, middleware, events, and listeners.
 
+## Hooks
+
+The package fires the following canonical hooks (`ap.privacy.*` camelCase, per the cross-package hooks convention):
+
+| Hook | Type |
+|---|---|
+| `ap.privacy.exportData` | filter |
+| `ap.privacy.exportFormats` | filter |
+| `ap.privacy.formatExport` | filter |
+| `ap.privacy.deleteData` | action |
+| `ap.privacy.anonymizeData` | filter |
+| `ap.privacy.hasData` | filter |
+| `ap.privacy.dataSummary` | filter |
+| `ap.privacy.consentGranted` | action |
+| `ap.privacy.consentRevoked` | action |
+| `ap.privacy.consentStatus` | filter |
+| `ap.privacy.consentCategories` | filter |
+
+### Deprecated Hooks
+
+The following legacy hook names remain registered as backwards-compatibility aliases via `HookDeprecations`. Subscribers to any of the old names continue to fire — each emits an info-level log the first time it resolves per request. **Alias removal is deferred to the next major.**
+
+| Deprecated | Canonical |
+|---|---|
+| `privacy.export.data` | `ap.privacy.exportData` |
+| `privacy.export-data` | `ap.privacy.exportData` |
+| `privacy.export-formats` | `ap.privacy.exportFormats` |
+| `privacy.export-format` | `ap.privacy.formatExport` |
+| `privacy.delete-data` | `ap.privacy.deleteData` |
+| `privacy.anonymize-data` | `ap.privacy.anonymizeData` |
+| `privacy.has-data` | `ap.privacy.hasData` |
+| `privacy.data-summary` | `ap.privacy.dataSummary` |
+| `privacy.consent-granted` | `ap.privacy.consentGranted` |
+| `privacy.consent-revoked` | `ap.privacy.consentRevoked` |
+| `privacy.consent-status` | `ap.privacy.consentStatus` |
+| `privacy.consent-categories` | `ap.privacy.consentCategories` |
+
 ## Upgrading
 
 See [UPGRADING.md](UPGRADING.md) for version-to-version migration notes.
