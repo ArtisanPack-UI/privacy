@@ -1,6 +1,6 @@
 {
 	"name": "@artisanpack-ui/privacy",
-	"version": "1.0.1",
+	"version": "1.1.0",
 	"description": "Client-side companion for artisanpack-ui/privacy — vanilla JS API plus React and Vue components for cookie consent management.",
 	"license": "MIT",
 	"author": {

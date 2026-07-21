@@ -10,7 +10,7 @@
  *
  * Other packages can append sections to the payload by listening for the
  * {@see DataExportCollecting} event, or — when the `artisanpack-ui/hooks`
- * package is installed — by registering an `addFilter('privacy.export.data', …)`
+ * package is installed — by registering an `addFilter('ap.privacy.exportData', …)`
  * filter that receives `($data, $subject)` and returns the mutated array.
  *
  * @package    ArtisanPack_UI
@@ -243,7 +243,7 @@ class DataExportService
 		$data = $event->data;
 
 		if ( function_exists( 'applyFilters' ) ) {
-			$data = (array) applyFilters( 'privacy.export.data', $data, $subject );
+			$data = (array) applyFilters( 'ap.privacy.exportData', $data, $subject );
 		}
 
 		return $data;

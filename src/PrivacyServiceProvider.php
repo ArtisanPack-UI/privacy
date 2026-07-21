@@ -68,6 +68,7 @@ use ArtisanPackUI\Privacy\Services\PersonalDataScanner;
 use ArtisanPackUI\Privacy\Services\PrivacyPolicyGenerator;
 use ArtisanPackUI\Privacy\Services\ReconsentService;
 use ArtisanPackUI\Privacy\Services\VerificationService;
+use ArtisanPackUI\Privacy\Support\HookAliases;
 use ArtisanPackUI\Privacy\View\PrivacyDirectives;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -210,6 +211,8 @@ class PrivacyServiceProvider extends ServiceProvider
 	 */
 	public function boot(): void
 	{
+		HookAliases::register();
+
 		$this->publishes( [
 			__DIR__ . '/../config/artisanpack/privacy.php'
 				 => config_path( 'artisanpack/privacy.php' ),
